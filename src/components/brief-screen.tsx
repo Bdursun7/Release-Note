@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { useI18n } from "@/components/i18n-provider";
 import { Button, ErrorBanner } from "@/components/ui";
-import { footnote, sectionHeading } from "@/lib/llm";
+import { footnote, sectionHeading } from "@/lib/brief-format";
 import type { BriefDocument, BriefSectionKey } from "@/types/brief";
 
 const ORDER: BriefSectionKey[] = ["improvements", "bugFixes", "other"];

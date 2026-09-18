@@ -6,7 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { useI18n } from "@/components/i18n-provider";
 import { Button } from "@/components/ui";
 
-export function Landing({ githubReady }: { githubReady: boolean }) {
+export function Landing({ githubReady, demoReady }: { githubReady: boolean; demoReady: boolean }) {
   const { t } = useI18n();
   const { data, status } = useSession();
   return (
@@ -46,7 +46,12 @@ export function Landing({ githubReady }: { githubReady: boolean }) {
                 >
                   {t("landing.connect")}
                 </Button>
-                <Button variant="ghost" className="w-full" onClick={() => signIn("demo", { intent: "demo", callbackUrl: "/repos" })}>
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  disabled={!demoReady}
+                  onClick={() => signIn("demo", { intent: "demo", callbackUrl: "/repos" })}
+                >
                   {t("landing.demo")}
                 </Button>
               </>
@@ -54,6 +59,9 @@ export function Landing({ githubReady }: { githubReady: boolean }) {
           </div>
           {!githubReady ? (
             <p className="mt-4 text-xs leading-relaxed text-ink-faint">{t("landing.githubMissing")}</p>
+          ) : null}
+          {!demoReady ? (
+            <p className="mt-4 text-xs leading-relaxed text-ink-faint">{t("landing.demoMissing")}</p>
           ) : null}
         </aside>
       </main>

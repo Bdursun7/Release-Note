@@ -10,7 +10,7 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, userId } = await currentUser();
+  const { session, userId, githubAccessToken } = await currentUser();
   if (!userId || !session) return jsonError("Unauthorized", 401);
   const { id } = await context.params;
   const draft = await ownedDraft(id, userId);
@@ -18,7 +18,7 @@ export async function POST(
   if (!draft.branch) return jsonError("Branch required");
   try {
     const { commits, stats } = await loadCommitRange({
-      token: session.accessToken,
+      token: githubAccessToken,
       isDemo: Boolean(session.isDemo) || draft.source === "demo",
       owner: draft.owner,
       repo: draft.repo,

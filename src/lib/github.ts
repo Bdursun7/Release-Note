@@ -1,10 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import {
-  demoBranches,
-  demoCommits,
-  demoRepos,
-  demoStats,
-} from "@/lib/mock-data";
+import { demoBranches, demoRepos, loadFixtureRange } from "@/lib/mock-data";
 import type {
   BranchSummary,
   CommitRecord,
@@ -13,6 +8,11 @@ import type {
 } from "@/types/brief";
 
 const MAX_COMMITS = 500;
+
+/** Classic OAuth: GitHub has no private read-only scope. Prefer a GitHub App (Contents: Read). */
+export function githubOAuthScopes(): string {
+  return process.env.GITHUB_SCOPE || "read:user public_repo";
+}
 
 export function githubConfigured(): boolean {
   return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
@@ -105,11 +105,13 @@ export async function loadCommitRange(opts: {
   lastN?: number | null;
 }): Promise<{ commits: CommitRecord[]; stats: RangeStats }> {
   if (opts.isDemo || mockForced() || !opts.token) {
-    const n = Math.min(MAX_COMMITS, Math.max(1, opts.lastN ?? 50));
-    if (opts.rangeType === "lastN") {
-      return { commits: demoCommits.slice(0, n), stats: demoStats };
-    }
-    return { commits: demoCommits, stats: demoStats };
+    return loadFixtureRange({
+      rangeType: opts.rangeType,
+      baseRef: opts.baseRef,
+      headRef: opts.headRef,
+      branch: opts.branch,
+      lastN: opts.lastN,
+    });
   }
 
   const client = octokit(opts.token);
@@ -125,14 +127,14 @@ export async function loadCommitRange(opts: {
 
   const base = opts.baseRef?.trim();
   if (!base) {
-    throw new Error("Base ref is required for base..head");
+    throw new Error("Base ref is required for base...head");
   }
 
   try {
     const compared = await client.repos.compareCommitsWithBasehead({
       owner: opts.owner,
       repo: opts.repo,
-      basehead: `${base}..${head}`,
+      basehead: `${base}...${head}`,
       per_page: 100,
     });
     let commits = (compared.data.commits ?? []).map(normalizeCommit);

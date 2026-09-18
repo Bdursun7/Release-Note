@@ -3,11 +3,11 @@ import { currentUser, jsonError } from "@/lib/api";
 import { listRepos } from "@/lib/github";
 
 export async function GET() {
-  const { session } = await currentUser();
+  const { session, githubAccessToken } = await currentUser();
   if (!session?.userId) return jsonError("Unauthorized", 401);
   try {
     const repos = await listRepos({
-      token: session.accessToken,
+      token: githubAccessToken,
       isDemo: Boolean(session.isDemo),
     });
     return NextResponse.json({ repos });

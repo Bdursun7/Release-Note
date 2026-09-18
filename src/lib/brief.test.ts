@@ -3,7 +3,7 @@ import { dictionaries } from "./i18n";
 import { emptyCuration, isNoiseCommit, recommendedSelection, categorizeCommit } from "./curation";
 import { demoCommits } from "./mock-data";
 import { briefToMarkdown } from "./export";
-import { heuristicBrief, rangeLabel } from "./llm";
+import { heuristicBrief, rangeLabel } from "./brief-format";
 import { demoStats } from "./mock-data";
 
 describe("i18n dictionaries", () => {

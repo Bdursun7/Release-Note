@@ -3,7 +3,7 @@ import { currentUser, jsonError } from "@/lib/api";
 import { listBranches } from "@/lib/github";
 
 export async function GET(request: Request) {
-  const { session } = await currentUser();
+  const { session, githubAccessToken } = await currentUser();
   if (!session?.userId) return jsonError("Unauthorized", 401);
   const { searchParams } = new URL(request.url);
   const owner = searchParams.get("owner");
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (!owner || !repo) return jsonError("owner and repo required");
   try {
     const branches = await listBranches({
-      token: session.accessToken,
+      token: githubAccessToken,
       isDemo: Boolean(session.isDemo),
       owner,
       repo,

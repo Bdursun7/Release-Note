@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { currentUser, jsonError, ownedDraft } from "@/lib/api";
-import { generateBrief, rangeLabel } from "@/lib/llm";
+import { rangeLabel } from "@/lib/brief-format";
+import { generateBrief, hasLlm } from "@/lib/llm";
 import { prisma } from "@/lib/prisma";
+import { clientIp, consumeDemoLlmLimit } from "@/lib/rate-limit";
 import type {
   CommitRecord,
   CurationState,
@@ -13,14 +15,20 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { userId } = await currentUser();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const { session, userId } = await currentUser();
+  if (!userId || !session) return jsonError("Unauthorized", 401);
   const { id } = await context.params;
   const draft = await ownedDraft(id, userId);
   if (!draft) return jsonError("Not found", 404);
   const body = await request.json().catch(() => ({}));
   const locale = (body.locale === "tr" || body.locale === "en" ? body.locale : draft.briefLocale) as Locale;
   const byok = typeof body.byok === "string" ? body.byok : null;
+  const allowEnvKey = !session.isDemo;
+  if (session.isDemo && hasLlm(byok, allowEnvKey)) {
+    if (!consumeDemoLlmLimit({ userId, ip: clientIp(request) })) {
+      return jsonError("Too many LLM requests from the sample workspace.", 429);
+    }
+  }
   const commits = (draft.commitsJson as CommitRecord[] | null) ?? [];
   const curation = (draft.curationJson as CurationState | null) ?? {
     selected: {},
@@ -48,6 +56,7 @@ export async function POST(
     curation,
     stats,
     byok,
+    allowEnvKey,
   });
   const updated = await prisma.draft.update({
     where: { id: draft.id },

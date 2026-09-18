@@ -102,3 +102,57 @@ export const demoBranches = [
   { name: "main", protected: true },
   { name: "release/2026-09", protected: false },
 ];
+
+/** Named refs → index in `demoCommits` (newest-first). Used for fixture three-dot compares. */
+export const demoRefIndex: Record<string, number> = {
+  main: 0,
+  HEAD: 0,
+  "v1.4.0": 20,
+  "release/2026-09": 3,
+};
+
+export function resolveDemoRefIndex(ref: string): number {
+  const key = ref.trim();
+  if (key in demoRefIndex) return demoRefIndex[key];
+  const idx = demoCommits.findIndex(
+    (commit) => commit.sha === key || commit.sha.startsWith(key) || commit.shortSha === key,
+  );
+  if (idx >= 0) return idx;
+  throw new Error(`Unknown demo ref: ${ref}`);
+}
+
+function scaleDemoStats(count: number) {
+  const ratio = demoCommits.length ? count / demoCommits.length : 0;
+  return {
+    additions: Math.round(demoStats.additions * ratio),
+    deletions: Math.round(demoStats.deletions * ratio),
+    filesChanged: count === 0 ? 0 : Math.max(1, Math.round(demoStats.filesChanged * ratio)),
+    truncated: false,
+  };
+}
+
+/** Linear-history stand-in for GitHub `base...head` (commits after base, up to head). */
+export function loadFixtureRange(opts: {
+  rangeType: "refs" | "lastN";
+  baseRef?: string | null;
+  headRef?: string | null;
+  branch: string;
+  lastN?: number | null;
+}): { commits: typeof demoCommits; stats: typeof demoStats } {
+  const head = opts.headRef?.trim() || opts.branch || "main";
+  if (opts.rangeType === "lastN") {
+    const n = Math.min(500, Math.max(1, opts.lastN ?? 50));
+    const headIdx = resolveDemoRefIndex(head);
+    const commits = demoCommits.slice(headIdx, headIdx + n);
+    return { commits, stats: scaleDemoStats(commits.length) };
+  }
+  const base = opts.baseRef?.trim();
+  if (!base) throw new Error("Base ref is required for base...head");
+  const headIdx = resolveDemoRefIndex(head);
+  const baseIdx = resolveDemoRefIndex(base);
+  if (baseIdx <= headIdx) {
+    return { commits: [], stats: scaleDemoStats(0) };
+  }
+  const commits = demoCommits.slice(headIdx, baseIdx);
+  return { commits, stats: scaleDemoStats(commits.length) };
+}

@@ -4,7 +4,7 @@ import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { BriefDocument, BriefSectionKey } from "@/types/brief";
-import { footnote, sectionHeading } from "@/lib/llm";
+import { footnote, sectionHeading } from "@/lib/brief-format";
 
 const SECTION_ORDER: BriefSectionKey[] = ["improvements", "bugFixes", "other"];
 
