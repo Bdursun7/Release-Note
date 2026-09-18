@@ -1,0 +1,161 @@
+import "server-only";
+
+import type {
+  BriefDocument,
+  CommitRecord,
+  CurationState,
+  GroupSuggestion,
+  Locale,
+  RangeStats,
+} from "@/types/brief";
+import { conventionalScope, heuristicGroupSuggestions, includedCommits } from "@/lib/curation";
+import { heuristicBrief } from "@/lib/brief-format";
+
+function llmConfig(byok?: string | null, allowEnvKey = true) {
+  const apiKey = byok?.trim() || (allowEnvKey ? process.env.OPENAI_API_KEY || "" : "");
+  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  return { apiKey, baseUrl, model };
+}
+
+export function hasLlm(byok?: string | null, allowEnvKey = true): boolean {
+  return Boolean(llmConfig(byok, allowEnvKey).apiKey);
+}
+
+async function completeJson(opts: {
+  byok?: string | null;
+  allowEnvKey?: boolean;
+  system: string;
+  user: string;
+}): Promise<unknown> {
+  const { apiKey, baseUrl, model } = llmConfig(opts.byok, opts.allowEnvKey !== false);
+  if (!apiKey) throw new Error("No LLM key");
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: opts.system },
+        { role: "user", content: opts.user },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`LLM error ${response.status}: ${text.slice(0, 200)}`);
+  }
+  const body = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const content = body.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty LLM response");
+  return JSON.parse(content);
+}
+
+export async function suggestGroups(opts: {
+  commits: CommitRecord[];
+  byok?: string | null;
+  allowEnvKey?: boolean;
+}): Promise<{ suggestions: GroupSuggestion[]; usedLlm: boolean }> {
+  const payload = opts.commits.map((commit) => ({
+    sha: commit.shortSha,
+    full: commit.sha,
+    headline: commit.headline,
+    scope: conventionalScope(commit.message),
+  }));
+  if (!hasLlm(opts.byok, opts.allowEnvKey !== false)) {
+    return { suggestions: heuristicGroupSuggestions(opts.commits), usedLlm: false };
+  }
+  try {
+    const json = (await completeJson({
+      byok: opts.byok,
+      allowEnvKey: opts.allowEnvKey,
+      system:
+        "You group git commits for an internal ship brief. Return JSON {suggestions:[{id,title,shas,rationale}]}. Groups are thematic outcomes, 2-8 groups, each with 2+ shas from the provided full SHAs. Do not invent SHAs. Titles in the same language as most headlines if mixed, else English. No chore/merge groups.",
+      user: JSON.stringify(payload),
+    })) as { suggestions?: GroupSuggestion[] };
+    const allowed = new Set(opts.commits.map((commit) => commit.sha));
+    const suggestions = (json.suggestions ?? [])
+      .map((suggestion, index) => ({
+        id: suggestion.id || `llm-${index}`,
+        title: suggestion.title,
+        rationale: suggestion.rationale,
+        shas: (suggestion.shas || [])
+          .map((sha) => {
+            if (allowed.has(sha)) return sha;
+            const match = opts.commits.find(
+              (commit) => commit.sha.startsWith(sha) || commit.shortSha === sha,
+            );
+            return match?.sha;
+          })
+          .filter((sha): sha is string => Boolean(sha)),
+      }))
+      .filter((suggestion) => suggestion.shas.length >= 2 && suggestion.title);
+    return {
+      suggestions: suggestions.slice(0, 8),
+      usedLlm: true,
+    };
+  } catch {
+    return { suggestions: heuristicGroupSuggestions(opts.commits), usedLlm: false };
+  }
+}
+
+export async function generateBrief(opts: {
+  title: string;
+  locale: Locale;
+  commits: CommitRecord[];
+  curation: CurationState;
+  stats: RangeStats;
+  byok?: string | null;
+  allowEnvKey?: boolean;
+}): Promise<BriefDocument> {
+  const fallback = heuristicBrief(opts);
+  if (!hasLlm(opts.byok, opts.allowEnvKey !== false)) return fallback;
+  const included = includedCommits(opts.commits, opts.curation);
+  const groups = opts.curation.groups.map((group) => ({
+    title: group.title,
+    headlines: included
+      .filter((commit) => group.shas.includes(commit.sha))
+      .map((commit) => commit.headline),
+  }));
+  try {
+    const json = (await completeJson({
+      byok: opts.byok,
+      allowEnvKey: opts.allowEnvKey,
+      system: `You write an internal ship brief (not a changelog dump, not a LinkedIn post). Language: ${opts.locale === "tr" ? "Turkish" : "English"}. Return JSON {summary, improvements, bugFixes, other}. summary: 2-4 sentences. Each section is an array of human-readable outcome bullets (what shipped / what is now true), not raw commit messages. Omit empty meaning — use [] and the UI will hide the heading. Keep proper nouns and APIs from the source. Do not translate code identifiers. Do not mention SHAs in the body.`,
+      user: JSON.stringify({
+        title: opts.title,
+        groups,
+        commits: included.map((commit) => ({
+          headline: commit.headline,
+          author: commit.authorName,
+        })),
+      }),
+    })) as {
+      summary?: string;
+      improvements?: string[];
+      bugFixes?: string[];
+      other?: string[];
+    };
+    return {
+      ...fallback,
+      summary: json.summary?.trim() || fallback.summary,
+      sections: {
+        improvements: Array.isArray(json.improvements)
+          ? json.improvements.filter(Boolean)
+          : fallback.sections.improvements,
+        bugFixes: Array.isArray(json.bugFixes) ? json.bugFixes.filter(Boolean) : fallback.sections.bugFixes,
+        other: Array.isArray(json.other) ? json.other.filter(Boolean) : fallback.sections.other,
+      },
+      usedLlm: true,
+    };
+  } catch {
+    return fallback;
+  }
+}
