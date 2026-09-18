@@ -1,0 +1,5 @@
+# Prisma Migrate Lock
+
+# This file is used to lock the current Prisma Migrate schema provider.
+
+provider = "postgresql"
