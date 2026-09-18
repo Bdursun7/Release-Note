@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dictionaries } from "./i18n";
-import { emptyCuration, isNoiseCommit, recommendedSelection } from "./curation";
+import { emptyCuration, isNoiseCommit, recommendedSelection, categorizeCommit } from "./curation";
 import { demoCommits } from "./mock-data";
 import { briefToMarkdown } from "./export";
 import { heuristicBrief, rangeLabel } from "./llm";
@@ -24,9 +24,11 @@ describe("noise filter", () => {
     const merge = demoCommits.find((c) => c.message.startsWith("Merge"));
     const chore = demoCommits.find((c) => c.message.startsWith("chore:"));
     const deps = demoCommits.find((c) => c.message.includes("dependabot") || c.message.includes("chore(deps)"));
+    const docs = demoCommits.find((c) => c.message.startsWith("docs:"));
     if (merge) expect(isNoiseCommit(merge)).toBe(true);
     if (chore) expect(isNoiseCommit(chore)).toBe(true);
     if (deps) expect(isNoiseCommit(deps)).toBe(true);
+    if (docs) expect(isNoiseCommit(docs)).toBe(false);
   });
 });
 
@@ -56,6 +58,8 @@ describe("brief synthesis", () => {
     expect(body).not.toContain("feat(checkout):");
     expect(brief.summary.split(".").length).toBeGreaterThanOrEqual(2);
     expect(brief.stats.leftOut).toBeGreaterThan(0);
+    const docs = demoCommits.find((c) => c.message.startsWith("docs:"));
+    if (docs) expect(categorizeCommit(docs)).toBe("other");
 
     const { briefToPdf, briefToDocx } = await import("./export");
     const pdf = await briefToPdf(brief);

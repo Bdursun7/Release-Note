@@ -61,8 +61,8 @@ export function BriefScreen({ draftId }: { draftId: string }) {
                 <section key={key} className="mt-8">
                   <h2 className="font-serif text-xl text-copper">{sectionHeading(brief.locale, key)}</h2>
                   <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed">
-                    {items.map((item) => (
-                      <li key={item}>{item}</li>
+                    {items.map((item, index) => (
+                      <li key={`${key}-${index}`}>{item}</li>
                     ))}
                   </ul>
                 </section>

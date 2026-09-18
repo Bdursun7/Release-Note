@@ -66,12 +66,13 @@ export function conventionalScope(message: string): string | null {
 export function categorizeCommit(commit: CommitRecord): BriefSectionKey {
   const type = conventionalType(commit.message);
   const headline = headlineOf(commit.message).toLowerCase();
-  if (type === "feat" || type === "perf" || /\b(add|improve|enhance|introduce)\b/i.test(headline)) {
-    return "improvements";
+  if (type === "feat" || type === "perf") return "improvements";
+  if (type === "fix") return "bugFixes";
+  if (type === "test" || type === "docs" || type === "refactor" || type === "style") {
+    return "other";
   }
-  if (type === "fix" || /\b(fix|bug|hotfix|patch|resolve)\b/i.test(headline)) {
-    return "bugFixes";
-  }
+  if (/\b(add|improve|enhance|introduce)\b/i.test(headline)) return "improvements";
+  if (/\b(fix|bug|hotfix|patch|resolve)\b/i.test(headline)) return "bugFixes";
   return "other";
 }
 
