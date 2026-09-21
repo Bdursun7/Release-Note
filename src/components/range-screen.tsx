@@ -25,7 +25,7 @@ export function RangeScreen({ draftId }: { draftId: string }) {
   const [draft, setDraft] = useState<DraftPayload | null>(null);
   const [branches, setBranches] = useState<BranchSummary[]>([]);
   const [branch, setBranch] = useState("");
-  const [rangeType, setRangeType] = useState<RangeType>("refs");
+  const [rangeType, setRangeType] = useState<RangeType>("lastN");
   const [baseRef, setBaseRef] = useState("");
   const [headRef, setHeadRef] = useState("");
   const [lastN, setLastN] = useState(50);
@@ -40,7 +40,7 @@ export function RangeScreen({ draftId }: { draftId: string }) {
         const d = data.draft as DraftPayload;
         setDraft(d);
         setBranch(d.branch || d.defaultBranch);
-        setRangeType((d.rangeType as RangeType) || "refs");
+        setRangeType((d.rangeType as RangeType) || "lastN");
         setBaseRef(d.baseRef || "");
         setHeadRef(d.headRef || d.branch || d.defaultBranch);
         setLastN(d.lastN || 50);
@@ -108,8 +108,32 @@ export function RangeScreen({ draftId }: { draftId: string }) {
             </Select>
           </Field>
           <Field label={t("range.mode")}>
-            <div className="flex flex-col gap-2 text-sm">
-              <label className="flex items-center gap-2">
+            <div className="flex flex-col gap-3 text-sm">
+              <label
+                className={`flex items-start gap-2 rounded-sm border px-3 py-2.5 ${
+                  rangeType === "lastN" ? "border-copper/40 bg-copper/5" : "border-transparent"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="rangeType"
+                  className="mt-1"
+                  checked={rangeType === "lastN"}
+                  onChange={() => setRangeType("lastN")}
+                />
+                <span>
+                  <span className="font-medium">{t("range.lastN")}</span>
+                  <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-copper">
+                    {t("range.recommended")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-ink-faint">{t("range.lastNHint")}</span>
+                </span>
+              </label>
+              <label
+                className={`flex items-center gap-2 rounded-sm border px-3 py-2.5 ${
+                  rangeType === "refs" ? "border-line bg-paper-recede/40" : "border-transparent"
+                }`}
+              >
                 <input
                   type="radio"
                   name="rangeType"
@@ -117,15 +141,6 @@ export function RangeScreen({ draftId }: { draftId: string }) {
                   onChange={() => setRangeType("refs")}
                 />
                 {t("range.refs")}
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="rangeType"
-                  checked={rangeType === "lastN"}
-                  onChange={() => setRangeType("lastN")}
-                />
-                {t("range.lastN")}
               </label>
             </div>
           </Field>

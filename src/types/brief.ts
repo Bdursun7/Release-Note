@@ -44,11 +44,19 @@ export type GroupSuggestion = {
 
 export type BriefSectionKey = "improvements" | "bugFixes" | "other";
 
+/** One named cluster under a category, or a standalone change when title is null. */
+export type BriefSectionGroup = {
+  title: string | null;
+  bullets: string[];
+};
+
+export type LlmFallbackReason = "no_key" | "llm_error";
+
 export type BriefDocument = {
   title: string;
   summary: string;
   locale: Locale;
-  sections: Record<BriefSectionKey, string[]>;
+  sections: Record<BriefSectionKey, BriefSectionGroup[]>;
   stats: {
     commitCount: number;
     authors: string[];
@@ -59,6 +67,8 @@ export type BriefDocument = {
   appendix: Array<{ sha: string; message: string }>;
   generatedAt: string;
   usedLlm: boolean;
+  /** Present when usedLlm is false: missing key vs model/request failure. */
+  llmFallback?: LlmFallbackReason;
 };
 
 export type RepoSummary = {

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { useI18n } from "@/components/i18n-provider";
-import { Button, ErrorBanner, Field, Select, TextInput } from "@/components/ui";
+import { Button, ErrorBanner, Field, Select, TextInput, WarningBanner } from "@/components/ui";
 import type { Locale } from "@/lib/i18n";
 
 const KEY = "sbb-llm-key";
@@ -17,6 +17,7 @@ export function GenerateScreen({ draftId }: { draftId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [included, setIncluded] = useState<number | null>(null);
+  const [envLlm, setEnvLlm] = useState<boolean | null>(null);
 
   useEffect(() => {
     setByok(localStorage.getItem(KEY) || "");
@@ -28,9 +29,22 @@ export function GenerateScreen({ draftId }: { draftId: string }) {
         setIncluded(Object.values(selected).filter(Boolean).length);
       })
       .catch((err: Error) => setError(err.message));
+    fetch("/api/health")
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok) setEnvLlm(Boolean(data.llmConfigured));
+      })
+      .catch(() => setEnvLlm(false));
   }, [draftId]);
 
+  const hasKey = Boolean(byok.trim()) || envLlm === true;
+  const showLlmWarning = envLlm !== null && !hasKey;
+
   async function run() {
+    if (included === 0) {
+      setError(t("generate.empty"));
+      return;
+    }
     setRunning(true);
     setError(null);
     if (byok) localStorage.setItem(KEY, byok);
@@ -62,6 +76,7 @@ export function GenerateScreen({ draftId }: { draftId: string }) {
           </p>
         ) : null}
         <div className="paper-card mt-8 space-y-6 p-6">
+          {showLlmWarning ? <WarningBanner message={t("generate.llmMissing")} /> : null}
           <Field label={t("generate.locale")}>
             <Select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
               <option value="follow">{t("generate.followUi", { ui: locale.toUpperCase() })}</option>
@@ -79,11 +94,12 @@ export function GenerateScreen({ draftId }: { draftId: string }) {
             />
           </Field>
           <ErrorBanner message={error} />
+          {included === 0 ? <WarningBanner message={t("generate.empty")} /> : null}
           <div className="flex flex-wrap gap-3">
             <Button variant="ghost" onClick={() => router.push(`/drafts/${draftId}/curate`)}>
               {t("generate.back")}
             </Button>
-            <Button onClick={run} disabled={running}>
+            <Button onClick={run} disabled={running || included === 0}>
               {running ? t("generate.running") : t("generate.run")}
             </Button>
           </div>

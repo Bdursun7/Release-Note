@@ -10,7 +10,7 @@ export const demoRepos: RepoSummary[] = [
     owner: DEMO_OWNER,
     name: DEMO_REPO,
     fullName: `${DEMO_OWNER}/${DEMO_REPO}`,
-    description: "Sample checkout service used for Ship Brief Builder demos",
+    description: "Sample checkout service used for Release Note Builder demos",
     defaultBranch: DEMO_BRANCH,
     private: false,
     updatedAt: "2026-09-12T09:00:00.000Z",

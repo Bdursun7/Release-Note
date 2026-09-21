@@ -81,9 +81,16 @@ a {
   background: #fbf8f1;
   border: 1px solid #d9d1c3;
   box-shadow: 0 24px 60px -32px rgba(22, 20, 16, 0.5);
+  overflow: hidden;
 }
 
-.brief-sheet h1 {
+.brief-sheet-bar {
+  height: 8px;
+  background: var(--copper);
+}
+
+.brief-sheet h1,
+.brief-sheet h3 {
   font-family: var(--font-fraunces), Georgia, serif;
 }
 

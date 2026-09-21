@@ -13,7 +13,7 @@ export async function GET(
   const draft = await ownedDraft(id, userId);
   if (!draft) return jsonError("Not found", 404);
   const brief = draft.briefJson as BriefDocument | null;
-  if (!brief) return jsonError("Generate the brief first", 409);
+  if (!brief) return jsonError("Generate the notes first", 409);
   const format = new URL(request.url).searchParams.get("format") || "md";
   if (format === "md") {
     const markdown = briefToMarkdown(brief);

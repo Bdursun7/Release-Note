@@ -26,8 +26,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ship Brief Builder",
-  description: "Internal ship briefs from Git commits — synthesized, not dumped.",
+  title: "Release Note Builder",
+  description: "Release notes from Git commits — a readable summary, not a dump.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

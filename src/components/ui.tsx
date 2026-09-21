@@ -75,3 +75,15 @@ export function ErrorBanner({ message }: { message?: string | null }) {
     </p>
   );
 }
+
+export function WarningBanner({ message }: { message?: string | null }) {
+  if (!message) return null;
+  return (
+    <p
+      role="status"
+      className="rounded-sm border border-copper/40 bg-copper/15 px-3 py-2.5 text-sm leading-relaxed text-copper-dark"
+    >
+      {message}
+    </p>
+  );
+}

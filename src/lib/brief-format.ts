@@ -1,8 +1,10 @@
 import type {
   BriefDocument,
+  BriefSectionGroup,
   BriefSectionKey,
   CommitRecord,
   CurationState,
+  LlmFallbackReason,
   Locale,
   RangeStats,
 } from "@/types/brief";
@@ -30,25 +32,84 @@ export function rangeLabel(input: {
   return `${repoAt} · ${input.baseRef || "?"}..${input.headRef || input.branch}`;
 }
 
+export function normalizeSection(items: unknown): BriefSectionGroup[] {
+  if (!Array.isArray(items)) return [];
+  const groups: BriefSectionGroup[] = [];
+  for (const item of items) {
+    if (typeof item === "string") {
+      const text = item.trim();
+      if (text) groups.push({ title: null, bullets: [text] });
+      continue;
+    }
+    if (!item || typeof item !== "object") continue;
+    const rec = item as { title?: unknown; bullets?: unknown; description?: unknown };
+    const title = typeof rec.title === "string" && rec.title.trim() ? rec.title.trim() : null;
+    let bullets: string[] = [];
+    if (Array.isArray(rec.bullets)) {
+      bullets = rec.bullets
+        .filter((bullet): bullet is string => typeof bullet === "string")
+        .map((bullet) => bullet.trim())
+        .filter(Boolean);
+    } else if (typeof rec.description === "string" && rec.description.trim()) {
+      bullets = [rec.description.trim()];
+    }
+    if (bullets.length) groups.push({ title, bullets });
+  }
+  return groups;
+}
+
+export function bulletCount(groups: BriefSectionGroup[]): number {
+  return groups.reduce((count, group) => count + group.bullets.length, 0);
+}
+
+export function normalizeBrief(brief: BriefDocument): BriefDocument {
+  return {
+    ...brief,
+    sections: {
+      improvements: normalizeSection(brief.sections?.improvements),
+      bugFixes: normalizeSection(brief.sections?.bugFixes),
+      other: normalizeSection(brief.sections?.other),
+    },
+    usedLlm: Boolean(brief.usedLlm),
+    llmFallback: brief.usedLlm ? undefined : brief.llmFallback,
+  };
+}
+
+function categorizeGroup(commits: CommitRecord[]): BriefSectionKey {
+  const counts: Record<BriefSectionKey, number> = {
+    improvements: 0,
+    bugFixes: 0,
+    other: 0,
+  };
+  for (const commit of commits) counts[categorizeCommit(commit)] += 1;
+  if (counts.improvements >= counts.bugFixes && counts.improvements >= counts.other) {
+    return "improvements";
+  }
+  if (counts.bugFixes >= counts.other) return "bugFixes";
+  return "other";
+}
+
 function heuristicSummary(
   locale: Locale,
   title: string,
   included: CommitRecord[],
-  sections: Record<BriefSectionKey, string[]>,
+  sections: Record<BriefSectionKey, BriefSectionGroup[]>,
 ): string {
   const authors = [...new Set(included.map((commit) => commit.authorName))];
   const authorText =
     authors.length <= 3 ? authors.join(", ") : `${authors.slice(0, 3).join(", ")} +${authors.length - 3}`;
+  const improvements = bulletCount(sections.improvements);
+  const bugFixes = bulletCount(sections.bugFixes);
   if (locale === "tr") {
     return [
       `${title} aralığı ${included.length} commit’ten süzüldü.`,
-      `${sections.improvements.length} geliştirme ve ${sections.bugFixes.length} hata düzeltmesi öne çıkıyor.`,
+      `${improvements} geliştirme ve ${bugFixes} hata düzeltmesi öne çıkıyor.`,
       `Katkı: ${authorText}. Ham mesajlar ekte; gövde sonuç dilindedir.`,
     ].join(" ");
   }
   return [
     `${title} covers ${included.length} curated commits.`,
-    `The ship highlights ${sections.improvements.length} improvements and ${sections.bugFixes.length} bug fixes.`,
+    `The notes highlight ${improvements} improvements and ${bugFixes} bug fixes.`,
     `Authors: ${authorText}. Source messages remain in the appendix; the body is outcomes, not a dump.`,
   ].join(" ");
 }
@@ -59,9 +120,10 @@ export function heuristicBrief(opts: {
   commits: CommitRecord[];
   curation: CurationState;
   stats: RangeStats;
+  llmFallback?: LlmFallbackReason;
 }): BriefDocument {
   const included = includedCommits(opts.commits, opts.curation);
-  const sections: Record<BriefSectionKey, string[]> = {
+  const sections: Record<BriefSectionKey, BriefSectionGroup[]> = {
     improvements: [],
     bugFixes: [],
     other: [],
@@ -70,14 +132,17 @@ export function heuristicBrief(opts: {
   for (const group of opts.curation.groups) {
     const groupCommits = included.filter((commit) => group.shas.includes(commit.sha));
     if (groupCommits.length === 0) continue;
-    const category = categorizeCommit(groupCommits[0]);
-    const outcomes = groupCommits.map((commit) => humanizeHeadline(commit.message));
-    sections[category].push(`${group.title}: ${outcomes.join("; ")}`);
+    const category = categorizeGroup(groupCommits);
+    const bullets = groupCommits.map((commit) => humanizeHeadline(commit.message));
+    sections[category].push({ title: group.title, bullets });
     for (const commit of groupCommits) used.add(commit.sha);
   }
   for (const commit of included) {
     if (used.has(commit.sha)) continue;
-    sections[categorizeCommit(commit)].push(humanizeHeadline(commit.message));
+    sections[categorizeCommit(commit)].push({
+      title: null,
+      bullets: [humanizeHeadline(commit.message)],
+    });
   }
   const authors = [...new Set(included.map((commit) => commit.authorName))];
   return {
@@ -98,6 +163,7 @@ export function heuristicBrief(opts: {
     })),
     generatedAt: new Date().toISOString(),
     usedLlm: false,
+    llmFallback: opts.llmFallback ?? "no_key",
   };
 }
 
@@ -119,4 +185,8 @@ export function footnote(brief: BriefDocument): string {
     minus: `−${brief.stats.deletions}`,
     left: brief.stats.leftOut,
   });
+}
+
+export function llmFallbackMessageKey(reason?: LlmFallbackReason): string {
+  return reason === "llm_error" ? "brief.llmError" : "brief.llmMissing";
 }

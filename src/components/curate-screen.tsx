@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { useI18n } from "@/components/i18n-provider";
-import { Button, ErrorBanner, TextInput } from "@/components/ui";
+import { Button, ErrorBanner, TextInput, WarningBanner } from "@/components/ui";
 import {
   PAGE_SIZE,
   applySuggestion,
@@ -19,6 +19,7 @@ import type {
   CommitRecord,
   CurationState,
   GroupSuggestion,
+  LlmFallbackReason,
 } from "@/types/brief";
 
 type DraftShape = {
@@ -43,12 +44,13 @@ export function CurateScreen({ draftId }: { draftId: string }) {
   const [suggestions, setSuggestions] = useState<GroupSuggestion[]>([]);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
-  const [showExcluded, setShowExcluded] = useState(true);
+  const [showExcluded, setShowExcluded] = useState(false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [repoLabel, setRepoLabel] = useState("");
+  const [suggestFallback, setSuggestFallback] = useState<LlmFallbackReason | null>(null);
 
   useEffect(() => {
     fetch(`/api/drafts/${draftId}`)
@@ -141,19 +143,40 @@ export function CurateScreen({ draftId }: { draftId: string }) {
     return pageRows.filter((row): row is Extract<Row, { kind: "commit" }> => row.kind === "commit").map((row) => row.commit.sha);
   }
 
+  async function runSuggest() {
+    setSuggesting(true);
+    setSuggestFallback(null);
+    const key = typeof window !== "undefined" ? localStorage.getItem("sbb-llm-key") : null;
+    const res = await fetch(`/api/drafts/${draftId}/suggest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ byok: key }),
+    });
+    const data = await res.json();
+    setSuggesting(false);
+    if (!res.ok) {
+      setError(data.error || t("error.generic"));
+      return;
+    }
+    setSuggestions(data.suggestions || []);
+    if (!data.usedLlm) {
+      setSuggestFallback(data.llmFallback === "llm_error" ? "llm_error" : "no_key");
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <AppHeader compact />
       <main className="mx-auto max-w-6xl px-4 py-8 md:px-6">
         <p className="font-mono text-xs uppercase tracking-widest text-copper">{repoLabel}</p>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-serif text-3xl">{t("curate.title")}</h1>
-            <p className="mt-2 max-w-2xl text-sm text-ink-muted">{t("curate.subtitle")}</p>
-          </div>
-          <Button onClick={() => router.push(`/drafts/${draftId}/generate`)}>{t("curate.continue")}</Button>
+        <div className="mt-2">
+          <h1 className="font-serif text-3xl">{t("curate.title")}</h1>
+          <p className="mt-2 max-w-2xl text-sm text-ink-muted">{t("curate.subtitle")}</p>
         </div>
-        <ErrorBanner message={error} />
+        <div className="mt-4 space-y-3">
+          <ErrorBanner message={error} />
+          {suggestFallback ? <WarningBanner message={t("suggest.llmFallback")} /> : null}
+        </div>
 
         {suggestions.length > 0 ? (
           <section className="mt-6 border border-sea/20 bg-sea-mist/60 p-4">
@@ -161,7 +184,7 @@ export function CurateScreen({ draftId }: { draftId: string }) {
               <h2 className="font-serif text-lg">{t("suggest.title")}</h2>
               <div className="flex gap-2">
                 <Button
-                  variant="ghost"
+                  variant="ink"
                   onClick={async () => {
                     let next = curation;
                     for (const suggestion of suggestions) next = applySuggestion(next, suggestion);
@@ -208,29 +231,34 @@ export function CurateScreen({ draftId }: { draftId: string }) {
         <div className="sticky-bulk mt-6 flex flex-wrap items-center gap-2 px-3 py-3">
           <span className="font-mono text-xs uppercase tracking-wider text-ink-muted">
             {t("curate.included", { n: included })} · {t("curate.leftOut", { n: left })}
-            {selectedShas.length ? ` · ${t("curate.selected", { n: selectedShas.length })}` : ""}
           </span>
           <div className="ml-auto flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => {
-              const next: Record<string, boolean> = { ...checked };
-              for (const sha of visibleCommitShas()) next[sha] = true;
-              setChecked(next);
-            }}>
-              {t("curate.selectAll")}
-            </Button>
-            <Button variant="ghost" onClick={() => setChecked({})}>
-              {t("curate.deselectAll")}
-            </Button>
             <Button
               variant="ghost"
-              disabled={!selectedShas.length}
+              onClick={() => persist({ ...curation, selected: recommendedSelection(commits) })}
+            >
+              {t("curate.applyFilter")}
+            </Button>
+            <Button variant="ghost" disabled={suggesting} onClick={() => void runSuggest()}>
+              {suggesting ? t("curate.suggesting") : t("curate.suggest")}
+            </Button>
+            <Button onClick={() => router.push(`/drafts/${draftId}/generate`)}>{t("curate.continue")}</Button>
+          </div>
+        </div>
+
+        {selectedShas.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border border-line bg-paper-raised px-3 py-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-ink-muted">
+              {t("curate.selected", { n: selectedShas.length })}
+            </span>
+            <Button
+              variant="ghost"
               onClick={() => persist(setSelected(curation, selectedShas, true))}
             >
               {t("curate.include")}
             </Button>
             <Button
               variant="danger"
-              disabled={!selectedShas.length}
               onClick={() => persist(setSelected(curation, selectedShas, false))}
             >
               {t("curate.exclude")}
@@ -243,7 +271,7 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             />
             <Button
               variant="ghost"
-              disabled={!selectedShas.length || !groupName.trim()}
+              disabled={!groupName.trim()}
               onClick={() => {
                 persist(mergeShasIntoGroup(curation, selectedShas, groupName.trim()));
                 setGroupName("");
@@ -252,43 +280,11 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             >
               {t("curate.group")}
             </Button>
-            <Button
-              variant="ghost"
-              disabled={!selectedShas.length}
-              onClick={() => persist(ungroupShas(curation, selectedShas))}
-            >
+            <Button variant="ghost" onClick={() => persist(ungroupShas(curation, selectedShas))}>
               {t("curate.ungroup")}
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => persist({ ...curation, selected: recommendedSelection(commits) })}
-            >
-              {t("curate.applyFilter")}
-            </Button>
-            <Button
-              variant="ink"
-              disabled={suggesting}
-              onClick={async () => {
-                setSuggesting(true);
-                const key = typeof window !== "undefined" ? localStorage.getItem("sbb-llm-key") : null;
-                const res = await fetch(`/api/drafts/${draftId}/suggest`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ byok: key }),
-                });
-                const data = await res.json();
-                setSuggesting(false);
-                if (!res.ok) {
-                  setError(data.error || t("error.generic"));
-                  return;
-                }
-                setSuggestions(data.suggestions || []);
-              }}
-            >
-              {suggesting ? t("curate.suggesting") : t("curate.suggest")}
-            </Button>
           </div>
-        </div>
+        ) : null}
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <TextInput
@@ -309,6 +305,26 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             />
             {t("curate.showExcluded")}
           </label>
+          <button
+            type="button"
+            className="text-xs text-ink-muted underline decoration-line underline-offset-2 hover:text-ink"
+            onClick={() => {
+              const next: Record<string, boolean> = { ...checked };
+              for (const sha of visibleCommitShas()) next[sha] = true;
+              setChecked(next);
+            }}
+          >
+            {t("curate.selectAll")}
+          </button>
+          {selectedShas.length ? (
+            <button
+              type="button"
+              className="text-xs text-ink-muted underline decoration-line underline-offset-2 hover:text-ink"
+              onClick={() => setChecked({})}
+            >
+              {t("curate.deselectAll")}
+            </button>
+          ) : null}
         </div>
 
         <div className="mt-4 overflow-hidden border border-line bg-paper-raised">
@@ -320,7 +336,10 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             <span className="hidden md:block">{t("curate.date")}</span>
           </div>
           {pageRows.length === 0 ? (
-            <p className="px-4 py-8 text-sm text-ink-faint">{t("curate.empty")}</p>
+            <div className="space-y-1 px-4 py-8 text-sm">
+              <p className="text-ink-muted">{t("curate.empty")}</p>
+              <p className="text-xs text-ink-faint">{t("curate.emptyHint")}</p>
+            </div>
           ) : (
             <ul>
               {pageRows.map((row) =>
