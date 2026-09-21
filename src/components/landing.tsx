@@ -22,10 +22,10 @@ export function Landing({
   const [pat, setPat] = useState("");
   const [showPat, setShowPat] = useState(!oauthReady || Boolean(authError));
   const [busy, setBusy] = useState<"oauth" | "pat" | "demo" | null>(null);
-  const [error, setError] = useState<string | null>(() => {
+  const [errorKey, setErrorKey] = useState<string | null>(() => {
     if (!authError) return null;
-    if (authError === "CredentialsSignin") return t("landing.patInvalid");
-    return t("landing.oauthError");
+    if (authError === "CredentialsSignin") return "landing.patInvalid";
+    return "landing.oauthError";
   });
 
   const authed = status === "authenticated" && data;
@@ -33,16 +33,16 @@ export function Landing({
   async function connectOauth() {
     if (!oauthReady) {
       setShowPat(true);
-      setError(t("landing.oauthUnavailable"));
+      setErrorKey("landing.oauthUnavailable");
       return;
     }
     setBusy("oauth");
-    setError(null);
+    setErrorKey(null);
     try {
       const result = await signIn("github", { callbackUrl: "/repos", redirect: false });
       if (result?.error || githubOAuthRedirectIsBroken(result?.url)) {
         setShowPat(true);
-        setError(t("landing.oauthError"));
+        setErrorKey("landing.oauthError");
         return;
       }
       if (result?.url) {
@@ -50,10 +50,10 @@ export function Landing({
         return;
       }
       setShowPat(true);
-      setError(t("landing.oauthError"));
+      setErrorKey("landing.oauthError");
     } catch {
       setShowPat(true);
-      setError(t("landing.oauthError"));
+      setErrorKey("landing.oauthError");
     } finally {
       setBusy(null);
     }
@@ -63,11 +63,11 @@ export function Landing({
     event.preventDefault();
     const token = pat.trim();
     if (!token) {
-      setError(t("landing.patInvalid"));
+      setErrorKey("landing.patInvalid");
       return;
     }
     setBusy("pat");
-    setError(null);
+    setErrorKey(null);
     try {
       const result = await signIn("github-pat", {
         pat: token,
@@ -75,16 +75,16 @@ export function Landing({
         redirect: false,
       });
       if (result?.error || !result?.ok) {
-        setError(t("landing.patInvalid"));
+        setErrorKey("landing.patInvalid");
         return;
       }
       if (result.url) {
         window.location.assign(result.url);
         return;
       }
-      setError(t("landing.patInvalid"));
+      setErrorKey("landing.patInvalid");
     } catch {
-      setError(t("landing.patInvalid"));
+      setErrorKey("landing.patInvalid");
     } finally {
       setBusy(null);
     }
@@ -185,7 +185,7 @@ export function Landing({
             )}
           </div>
           <div className="mt-4">
-            <ErrorBanner message={error} />
+            <ErrorBanner message={errorKey ? t(errorKey) : null} />
           </div>
           {!demoReady ? (
             <p className="mt-4 text-xs leading-relaxed text-ink-faint">{t("landing.demoMissing")}</p>
