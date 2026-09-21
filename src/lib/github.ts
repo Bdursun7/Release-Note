@@ -1,10 +1,11 @@
 import { Octokit } from "@octokit/rest";
-import { demoBranches, demoRepos, loadFixtureRange } from "@/lib/mock-data";
+import { demoBranches, demoRepos, demoTags, loadFixtureRange } from "@/lib/mock-data";
 import type {
   BranchSummary,
   CommitRecord,
   RangeStats,
   RepoSummary,
+  TagSummary,
 } from "@/types/brief";
 
 const MAX_COMMITS = 500;
@@ -137,6 +138,23 @@ export async function listBranches(opts: {
     name: branch.name,
     protected: Boolean(branch.protected),
   }));
+}
+
+export async function listTags(opts: {
+  token?: string | null;
+  isDemo: boolean;
+  owner: string;
+  repo: string;
+}): Promise<TagSummary[]> {
+  if (opts.isDemo || mockForced()) return demoTags;
+  if (!opts.token) return [];
+  const client = octokit(opts.token);
+  const { data } = await client.repos.listTags({
+    owner: opts.owner,
+    repo: opts.repo,
+    per_page: 50,
+  });
+  return data.map((tag) => ({ name: tag.name }));
 }
 
 export async function loadCommitRange(opts: {

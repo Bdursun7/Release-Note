@@ -78,8 +78,8 @@ export function ReposScreen() {
     <div className="min-h-screen">
       <AppHeader compact />
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="font-serif text-3xl">{t("repos.title")}</h1>
-        <p className="mt-2 text-sm text-ink-muted">{t("repos.subtitle")}</p>
+        <h1 className="font-serif text-3xl tracking-tight">{t("repos.title")}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">{t("repos.subtitle")}</p>
         <div className="mt-6">
           <TextInput
             value={query}
@@ -91,7 +91,7 @@ export function ReposScreen() {
         <div className="mt-4">
           <ErrorBanner message={error} />
         </div>
-        <ul className="mt-6 divide-y divide-line border border-line bg-paper-raised">
+        <ul className="mt-6 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-raised shadow-sm">
           {loading ? (
             <li className="px-4 py-8 text-sm text-ink-faint">{t("repos.loading")}</li>
           ) : emptyGithub ? (
@@ -105,7 +105,7 @@ export function ReposScreen() {
             <li className="px-4 py-8 text-sm text-ink-faint">{t("repos.emptySearch")}</li>
           ) : (
             filtered.map((repo) => (
-              <li key={String(repo.id)} className="flex items-center justify-between gap-4 px-4 py-3">
+              <li key={String(repo.id)} className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-paper-recede/40">
                 <div>
                   <p className="font-medium">{repo.fullName}</p>
                   <p className="text-xs text-ink-muted">

@@ -3,8 +3,8 @@
 @import "tailwindcss/utilities";
 
 :root {
-  --ink: #161410;
-  --paper: #f4efe4;
+  --ink: #2a241c;
+  --paper: #f6efe3;
   --copper: #c45c26;
   color-scheme: light;
 }
@@ -18,19 +18,14 @@ body {
 
 body {
   background-image:
-    linear-gradient(180deg, rgba(196, 92, 38, 0.05), transparent 220px),
-    radial-gradient(circle at 12% -10%, rgba(30, 77, 74, 0.08), transparent 42%),
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 27px,
-      rgba(22, 20, 16, 0.035) 28px
-    );
+    radial-gradient(ellipse at 8% -20%, rgba(196, 92, 38, 0.14), transparent 48%),
+    radial-gradient(ellipse at 92% 0%, rgba(42, 93, 89, 0.1), transparent 42%),
+    linear-gradient(180deg, rgba(255, 250, 242, 0.7), transparent 280px);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #c4b8a6 transparent;
+  scrollbar-color: #d4c4ae transparent;
 }
 
 a {
@@ -40,22 +35,27 @@ a {
 
 ::selection {
   background: #e8c4ad;
-  color: #161410;
+  color: #2a241c;
 }
 
 .lang-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.15rem;
   font-family: var(--font-plex-mono), ui-monospace, monospace;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  border: 1px solid rgba(255, 250, 242, 0.18);
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
 }
 
 .lang-toggle button {
   color: inherit;
   opacity: 0.45;
+  border-radius: 999px;
+  padding: 0.1rem 0.35rem;
 }
 
 .lang-toggle button[aria-pressed="true"] {
@@ -63,25 +63,33 @@ a {
 }
 
 .paper-card {
-  background: #fbf8f1;
-  border: 1px solid #d9d1c3;
-  box-shadow: 0 18px 50px -24px rgba(22, 20, 16, 0.45);
+  background: #fffaf2;
+  border: 1px solid #e4d9c8;
+  border-radius: 1.25rem;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 22px 50px -28px rgba(42, 36, 28, 0.45);
 }
 
 .sticky-bulk {
   position: sticky;
-  top: 0;
+  top: 0.75rem;
   z-index: 20;
-  backdrop-filter: blur(10px);
-  background: rgba(251, 248, 241, 0.92);
-  border-bottom: 1px solid #d9d1c3;
+  backdrop-filter: blur(14px);
+  background: rgba(255, 250, 242, 0.92);
+  border: 1px solid #e4d9c8;
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px -22px rgba(42, 36, 28, 0.5);
 }
 
 .brief-sheet {
-  background: #fbf8f1;
-  border: 1px solid #d9d1c3;
-  box-shadow: 0 24px 60px -32px rgba(22, 20, 16, 0.5);
+  background: #fffaf2;
+  border: 1px solid #e4d9c8;
+  border-radius: 1.35rem;
   overflow: hidden;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.75) inset,
+    0 28px 64px -34px rgba(42, 36, 28, 0.5);
 }
 
 .brief-sheet-bar {
@@ -92,6 +100,40 @@ a {
 .brief-sheet h1,
 .brief-sheet h3 {
   font-family: var(--font-fraunces), Georgia, serif;
+}
+
+.curate-table {
+  border: 1px solid #e4d9c8;
+  border-radius: 1.15rem;
+  overflow: hidden;
+  background: #fffaf2;
+  box-shadow: 0 18px 40px -30px rgba(42, 36, 28, 0.4);
+}
+
+input[type="checkbox"] {
+  accent-color: #c45c26;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+input[type="radio"] {
+  accent-color: #c45c26;
+}
+
+.mode-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  border: 1px solid #e4d9c8;
+  border-radius: 0.95rem;
+  padding: 0.85rem 1rem;
+  background: #fffaf2;
+  cursor: pointer;
+}
+
+.mode-choice[data-active="true"] {
+  border-color: rgba(196, 92, 38, 0.45);
+  background: rgba(196, 92, 38, 0.07);
 }
 
 input,
