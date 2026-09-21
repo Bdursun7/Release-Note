@@ -10,7 +10,11 @@ export async function GET() {
       token: githubAccessToken,
       isDemo: Boolean(session.isDemo),
     });
-    return NextResponse.json({ repos });
+    return NextResponse.json({
+      repos,
+      isDemo: Boolean(session.isDemo),
+      hasGithubToken: Boolean(githubAccessToken),
+    });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "GitHub request failed", 502);
   }

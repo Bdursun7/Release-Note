@@ -11,18 +11,33 @@ export function ReposScreen() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const [repos, setRepos] = useState<RepoSummary[]>([]);
+  const [isDemo, setIsDemo] = useState(false);
+  const [hasGithubToken, setHasGithubToken] = useState(true);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/repos")
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t("error.generic"));
+        if (cancelled) return;
         setRepos(data.repos);
+        setIsDemo(Boolean(data.isDemo));
+        setHasGithubToken(data.hasGithubToken !== false);
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [t]);
 
   const filtered = useMemo(() => {
@@ -56,6 +71,9 @@ export function ReposScreen() {
     router.push(`/drafts/${data.draft.id}/range`);
   }
 
+  const emptyGithub = !loading && !isDemo && repos.length === 0 && !query.trim();
+  const emptySearch = !loading && filtered.length === 0 && repos.length > 0;
+
   return (
     <div className="min-h-screen">
       <AppHeader compact />
@@ -74,8 +92,17 @@ export function ReposScreen() {
           <ErrorBanner message={error} />
         </div>
         <ul className="mt-6 divide-y divide-line border border-line bg-paper-raised">
-          {filtered.length === 0 ? (
-            <li className="px-4 py-8 text-sm text-ink-faint">{t("repos.empty")}</li>
+          {loading ? (
+            <li className="px-4 py-8 text-sm text-ink-faint">{t("repos.loading")}</li>
+          ) : emptyGithub ? (
+            <li className="space-y-2 px-4 py-8 text-sm text-ink-muted">
+              <p>{t("repos.emptyGithub")}</p>
+              <p className="text-xs leading-relaxed text-ink-faint">
+                {hasGithubToken ? t("repos.emptyGithubHint") : t("repos.emptyNoToken")}
+              </p>
+            </li>
+          ) : emptySearch || filtered.length === 0 ? (
+            <li className="px-4 py-8 text-sm text-ink-faint">{t("repos.emptySearch")}</li>
           ) : (
             filtered.map((repo) => (
               <li key={String(repo.id)} className="flex items-center justify-between gap-4 px-4 py-3">
