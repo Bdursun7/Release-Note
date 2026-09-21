@@ -3,22 +3,47 @@ import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { BriefDocument, BriefSectionKey } from "@/types/brief";
-import { footnote, sectionHeading } from "@/lib/brief-format";
+import type { BriefDocument, BriefSectionGroup, BriefSectionKey } from "@/types/brief";
+import { footnote, normalizeBrief, sectionHeading } from "@/lib/brief-format";
+import { t } from "@/lib/i18n";
 
 const SECTION_ORDER: BriefSectionKey[] = ["improvements", "bugFixes", "other"];
 
-export function briefToMarkdown(brief: BriefDocument): string {
-  const lines: string[] = [`# ${brief.title}`, "", brief.summary, ""];
-  for (const key of SECTION_ORDER) {
-    const items = brief.sections[key];
-    if (!items.length) continue;
-    lines.push(`## ${sectionHeading(brief.locale, key)}`, "");
-    for (const item of items) lines.push(`- ${item}`);
+function brandName(brief: BriefDocument): string {
+  return t(brief.locale, "brand.name");
+}
+
+function renderGroupsMarkdown(groups: BriefSectionGroup[]): string[] {
+  const lines: string[] = [];
+  for (const group of groups) {
+    if (group.title) {
+      lines.push(`### ${group.title}`, "");
+    }
+    for (const bullet of group.bullets) lines.push(`- ${bullet}`);
     lines.push("");
   }
-  lines.push("---", "", `_${footnote(brief)}_`, "", `<details>`, `<summary>${brief.locale === "tr" ? "Kaynak commit’ler" : "Source commits"}</summary>`, "");
-  for (const entry of brief.appendix) {
+  return lines;
+}
+
+export function briefToMarkdown(brief: BriefDocument): string {
+  const doc = normalizeBrief(brief);
+  const lines: string[] = [`# ${doc.title}`, "", doc.summary, ""];
+  for (const key of SECTION_ORDER) {
+    const groups = doc.sections[key];
+    if (!groups.length) continue;
+    lines.push(`## ${sectionHeading(doc.locale, key)}`, "");
+    lines.push(...renderGroupsMarkdown(groups));
+  }
+  lines.push(
+    "---",
+    "",
+    `_${footnote(doc)}_`,
+    "",
+    `<details>`,
+    `<summary>${doc.locale === "tr" ? "Kaynak commit’ler" : "Source commits"}</summary>`,
+    "",
+  );
+  for (const entry of doc.appendix) {
     lines.push(`- \`${entry.sha}\` ${entry.message}`);
   }
   lines.push("", `</details>`, "");
@@ -26,51 +51,65 @@ export function briefToMarkdown(brief: BriefDocument): string {
 }
 
 export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
+  const doc = normalizeBrief(brief);
   const children: Paragraph[] = [
     new Paragraph({
-      text: brief.title,
+      children: [new TextRun({ text: brandName(doc), size: 18, color: "C45C26" })],
+    }),
+    new Paragraph({
+      text: doc.title,
       heading: HeadingLevel.TITLE,
     }),
     new Paragraph({
       spacing: { after: 200 },
-      children: [new TextRun({ text: brief.summary, size: 22 })],
+      children: [new TextRun({ text: doc.summary, size: 22 })],
     }),
   ];
   for (const key of SECTION_ORDER) {
-    const items = brief.sections[key];
-    if (!items.length) continue;
+    const groups = doc.sections[key];
+    if (!groups.length) continue;
     children.push(
       new Paragraph({
-        text: sectionHeading(brief.locale, key),
+        text: sectionHeading(doc.locale, key),
         heading: HeadingLevel.HEADING_1,
       }),
     );
-    for (const item of items) {
-      children.push(
-        new Paragraph({
-          text: item,
-          bullet: { level: 0 },
-        }),
-      );
+    for (const group of groups) {
+      if (group.title) {
+        children.push(
+          new Paragraph({
+            text: group.title,
+            heading: HeadingLevel.HEADING_2,
+          }),
+        );
+      }
+      for (const bullet of group.bullets) {
+        children.push(
+          new Paragraph({
+            text: bullet,
+            bullet: { level: 0 },
+          }),
+        );
+      }
     }
   }
   children.push(
     new Paragraph({
       spacing: { before: 300 },
-      children: [new TextRun({ text: footnote(brief), italics: true, size: 18, color: "5c564c" })],
+      children: [new TextRun({ text: footnote(doc), italics: true, size: 18, color: "5c564c" })],
     }),
     new Paragraph({
       spacing: { before: 200 },
       children: [
         new TextRun({
-          text: brief.locale === "tr" ? "Ek — kaynak commit’ler" : "Appendix — source commits",
+          text: doc.locale === "tr" ? "Ek — kaynak commit’ler" : "Appendix — source commits",
           italics: true,
           size: 18,
         }),
       ],
     }),
   );
-  for (const entry of brief.appendix) {
+  for (const entry of doc.appendix) {
     children.push(
       new Paragraph({
         children: [
@@ -81,7 +120,7 @@ export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
     );
   }
 
-  const doc = new Document({
+  const file = new Document({
     numbering: {
       config: [
         {
@@ -99,7 +138,7 @@ export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
     },
     sections: [{ children }],
   });
-  const buffer = await Packer.toBuffer(doc);
+  const buffer = await Packer.toBuffer(file);
   return Buffer.from(buffer);
 }
 
@@ -114,6 +153,7 @@ async function loadPdfFontBold(): Promise<Uint8Array> {
 }
 
 export async function briefToPdf(brief: BriefDocument): Promise<Buffer> {
+  const doc = normalizeBrief(brief);
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const [regularBytes, boldBytes] = await Promise.all([loadPdfFont(), loadPdfFontBold()]);
@@ -176,30 +216,37 @@ export async function briefToPdf(brief: BriefDocument): Promise<Buffer> {
     color: copper,
   });
 
-  writeWrapped("Ship Brief Builder", regular, 9, copper, 4);
+  writeWrapped(brandName(doc), regular, 9, copper, 4);
   y -= 4;
-  writeWrapped(brief.title, bold, 18, ink, 8);
+  writeWrapped(doc.title, bold, 18, ink, 8);
   y -= 6;
-  writeWrapped(brief.summary, regular, 11, ink, 5);
+  writeWrapped(doc.summary, regular, 11, ink, 5);
   y -= 10;
 
   for (const key of SECTION_ORDER) {
-    const items = brief.sections[key];
-    if (!items.length) continue;
-    writeWrapped(sectionHeading(brief.locale, key), bold, 13, copper, 6);
+    const groups = doc.sections[key];
+    if (!groups.length) continue;
+    writeWrapped(sectionHeading(doc.locale, key), bold, 13, copper, 6);
     y -= 2;
-    for (const item of items) {
-      const width = pageSize[0] - margin * 2 - 14;
-      const lines = wrap(item, regular, 11, width);
-      for (let i = 0; i < lines.length; i += 1) {
-        ensure(16);
-        if (i === 0) {
-          page.drawText("•", { x: margin, y, size: 11, font: regular, color: ink });
-        }
-        page.drawText(lines[i], { x: margin + 14, y, size: 11, font: regular, color: ink });
-        y -= 16;
+    for (const group of groups) {
+      if (group.title) {
+        writeWrapped(group.title, bold, 11, ink, 5);
+        y -= 2;
       }
-      y -= 4;
+      for (const item of group.bullets) {
+        const width = pageSize[0] - margin * 2 - 14;
+        const lines = wrap(item, regular, 11, width);
+        for (let i = 0; i < lines.length; i += 1) {
+          ensure(16);
+          if (i === 0) {
+            page.drawText("•", { x: margin, y, size: 11, font: regular, color: ink });
+          }
+          page.drawText(lines[i], { x: margin + 14, y, size: 11, font: regular, color: ink });
+          y -= 16;
+        }
+        y -= 4;
+      }
+      y -= 6;
     }
     y -= 8;
   }
@@ -211,16 +258,16 @@ export async function briefToPdf(brief: BriefDocument): Promise<Buffer> {
     thickness: 0.6,
     color: rgb(0.85, 0.82, 0.76),
   });
-  writeWrapped(footnote(brief), regular, 9, muted, 4);
+  writeWrapped(footnote(doc), regular, 9, muted, 4);
   y -= 10;
   writeWrapped(
-    brief.locale === "tr" ? "Ek — kaynak commit’ler" : "Appendix — source commits",
+    doc.locale === "tr" ? "Ek — kaynak commit’ler" : "Appendix — source commits",
     bold,
     10,
     muted,
     4,
   );
-  for (const entry of brief.appendix) {
+  for (const entry of doc.appendix) {
     writeWrapped(`${entry.sha}  ${entry.message}`, regular, 8, muted, 3);
   }
 
@@ -234,5 +281,5 @@ export function exportFilename(brief: BriefDocument, ext: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 60);
-  return `${slug || "ship-brief"}.${ext}`;
+  return `${slug || "release-note"}.${ext}`;
 }

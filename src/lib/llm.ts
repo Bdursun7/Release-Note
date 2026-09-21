@@ -2,6 +2,8 @@ import "server-only";
 
 import type {
   BriefDocument,
+  BriefSectionGroup,
+  BriefSectionKey,
   CommitRecord,
   CurationState,
   GroupSuggestion,
@@ -9,7 +11,7 @@ import type {
   RangeStats,
 } from "@/types/brief";
 import { conventionalScope, heuristicGroupSuggestions, includedCommits } from "@/lib/curation";
-import { heuristicBrief } from "@/lib/brief-format";
+import { heuristicBrief, normalizeSection } from "@/lib/brief-format";
 
 function llmConfig(byok?: string | null, allowEnvKey = true) {
   const apiKey = byok?.trim() || (allowEnvKey ? process.env.OPENAI_API_KEY || "" : "");
@@ -62,7 +64,11 @@ export async function suggestGroups(opts: {
   commits: CommitRecord[];
   byok?: string | null;
   allowEnvKey?: boolean;
-}): Promise<{ suggestions: GroupSuggestion[]; usedLlm: boolean }> {
+}): Promise<{
+  suggestions: GroupSuggestion[];
+  usedLlm: boolean;
+  llmFallback?: "no_key" | "llm_error";
+}> {
   const payload = opts.commits.map((commit) => ({
     sha: commit.shortSha,
     full: commit.sha,
@@ -70,14 +76,18 @@ export async function suggestGroups(opts: {
     scope: conventionalScope(commit.message),
   }));
   if (!hasLlm(opts.byok, opts.allowEnvKey !== false)) {
-    return { suggestions: heuristicGroupSuggestions(opts.commits), usedLlm: false };
+    return {
+      suggestions: heuristicGroupSuggestions(opts.commits),
+      usedLlm: false,
+      llmFallback: "no_key",
+    };
   }
   try {
     const json = (await completeJson({
       byok: opts.byok,
       allowEnvKey: opts.allowEnvKey,
       system:
-        "You group git commits for an internal ship brief. Return JSON {suggestions:[{id,title,shas,rationale}]}. Groups are thematic outcomes, 2-8 groups, each with 2+ shas from the provided full SHAs. Do not invent SHAs. Titles in the same language as most headlines if mixed, else English. No chore/merge groups.",
+        "You group git commits for internal release notes. Return JSON {suggestions:[{id,title,shas,rationale}]}. Groups are thematic outcomes, 2-8 groups, each with 2+ shas from the provided full SHAs. Do not invent SHAs. Titles in the same language as most headlines if mixed, else English. No chore/merge groups.",
       user: JSON.stringify(payload),
     })) as { suggestions?: GroupSuggestion[] };
     const allowed = new Set(opts.commits.map((commit) => commit.sha));
@@ -102,8 +112,26 @@ export async function suggestGroups(opts: {
       usedLlm: true,
     };
   } catch {
-    return { suggestions: heuristicGroupSuggestions(opts.commits), usedLlm: false };
+    return {
+      suggestions: heuristicGroupSuggestions(opts.commits),
+      usedLlm: false,
+      llmFallback: "llm_error",
+    };
   }
+}
+
+const SECTION_KEYS: BriefSectionKey[] = ["improvements", "bugFixes", "other"];
+
+function parseLlmSections(
+  json: Record<string, unknown>,
+  fallback: Record<BriefSectionKey, BriefSectionGroup[]>,
+): Record<BriefSectionKey, BriefSectionGroup[]> {
+  const sections = { ...fallback };
+  for (const key of SECTION_KEYS) {
+    const parsed = normalizeSection(json[key]);
+    if (parsed.length) sections[key] = parsed;
+  }
+  return sections;
 }
 
 export async function generateBrief(opts: {
@@ -115,8 +143,10 @@ export async function generateBrief(opts: {
   byok?: string | null;
   allowEnvKey?: boolean;
 }): Promise<BriefDocument> {
-  const fallback = heuristicBrief(opts);
-  if (!hasLlm(opts.byok, opts.allowEnvKey !== false)) return fallback;
+  if (!hasLlm(opts.byok, opts.allowEnvKey !== false)) {
+    return heuristicBrief({ ...opts, llmFallback: "no_key" });
+  }
+  const fallback = heuristicBrief({ ...opts, llmFallback: "llm_error" });
   const included = includedCommits(opts.commits, opts.curation);
   const groups = opts.curation.groups.map((group) => ({
     title: group.title,
@@ -128,7 +158,7 @@ export async function generateBrief(opts: {
     const json = (await completeJson({
       byok: opts.byok,
       allowEnvKey: opts.allowEnvKey,
-      system: `You write an internal ship brief (not a changelog dump, not a LinkedIn post). Language: ${opts.locale === "tr" ? "Turkish" : "English"}. Return JSON {summary, improvements, bugFixes, other}. summary: 2-4 sentences. Each section is an array of human-readable outcome bullets (what shipped / what is now true), not raw commit messages. Omit empty meaning — use [] and the UI will hide the heading. Keep proper nouns and APIs from the source. Do not translate code identifiers. Do not mention SHAs in the body.`,
+      system: `You write internal release notes (not a changelog dump, not a LinkedIn post). Language: ${opts.locale === "tr" ? "Turkish" : "English"}. Return JSON {summary, improvements, bugFixes, other}. summary: 2-4 sentences. Each of improvements, bugFixes, other is an array of {title, bullets}. title is the group name from the input groups (keep it) or a short theme; use null for a standalone ungrouped change. bullets: 1-4 human-readable outcome sentences under that group (what shipped / what is now true), not raw commit messages. Nested structure is required: category → group title → bullets. Omit empty sections with []. Keep proper nouns and APIs from the source. Do not translate code identifiers. Do not mention SHAs in the body.`,
       user: JSON.stringify({
         title: opts.title,
         groups,
@@ -137,23 +167,14 @@ export async function generateBrief(opts: {
           author: commit.authorName,
         })),
       }),
-    })) as {
-      summary?: string;
-      improvements?: string[];
-      bugFixes?: string[];
-      other?: string[];
-    };
+    })) as Record<string, unknown>;
+    const summary = typeof json.summary === "string" ? json.summary.trim() : "";
     return {
       ...fallback,
-      summary: json.summary?.trim() || fallback.summary,
-      sections: {
-        improvements: Array.isArray(json.improvements)
-          ? json.improvements.filter(Boolean)
-          : fallback.sections.improvements,
-        bugFixes: Array.isArray(json.bugFixes) ? json.bugFixes.filter(Boolean) : fallback.sections.bugFixes,
-        other: Array.isArray(json.other) ? json.other.filter(Boolean) : fallback.sections.other,
-      },
+      summary: summary || fallback.summary,
+      sections: parseLlmSections(json, fallback.sections),
       usedLlm: true,
+      llmFallback: undefined,
     };
   } catch {
     return fallback;
