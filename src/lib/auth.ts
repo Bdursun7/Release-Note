@@ -5,10 +5,38 @@ import { getServerSession } from "next-auth/next";
 import { getToken } from "next-auth/jwt";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { githubConfigured, githubOAuthScopes } from "@/lib/github";
+import { githubConfigured, githubOAuthScopes, validateGithubPat } from "@/lib/github";
+import { applyGithubPatToJwt, buildClientSession } from "@/lib/auth-session";
 import { demoAuthEnabled } from "@/lib/flags";
 
 export { demoAuthEnabled };
+
+async function upsertGithubUser(params: {
+  githubId: string;
+  login: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}) {
+  return prisma.user.upsert({
+    where: { githubId: params.githubId },
+    update: {
+      name: params.name || undefined,
+      email: params.email,
+      image: params.image || undefined,
+      githubLogin: params.login,
+      isDemo: false,
+    },
+    create: {
+      githubId: params.githubId,
+      githubLogin: params.login,
+      name: params.name || params.login,
+      email: params.email,
+      image: params.image,
+      isDemo: false,
+    },
+  });
+}
 
 async function createIsolatedDemoUser() {
   const id = crypto.randomUUID();
@@ -25,13 +53,13 @@ async function createIsolatedDemoUser() {
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   secret: process.env.NEXTAUTH_SECRET,
-  pages: { signIn: "/" },
+  pages: { signIn: "/", error: "/" },
   providers: [
     ...(githubConfigured()
       ? [
           GitHubProvider({
-            clientId: process.env.GITHUB_CLIENT_ID || "",
-            clientSecret: process.env.GITHUB_CLIENT_SECRET || "",
+            clientId: process.env.GITHUB_CLIENT_ID?.trim() || "",
+            clientSecret: process.env.GITHUB_CLIENT_SECRET?.trim() || "",
             authorization: {
               params: {
                 scope: githubOAuthScopes(),
@@ -40,6 +68,33 @@ export const authOptions: NextAuthOptions = {
           }),
         ]
       : []),
+    CredentialsProvider({
+      id: "github-pat",
+      name: "GitHub PAT",
+      credentials: {
+        pat: { label: "Personal Access Token", type: "password" },
+      },
+      async authorize(credentials) {
+        const pat = typeof credentials?.pat === "string" ? credentials.pat : "";
+        const identity = await validateGithubPat(pat);
+        if (!identity) return null;
+        const dbUser = await upsertGithubUser({
+          githubId: String(identity.id),
+          login: identity.login,
+          name: identity.name,
+          email: identity.email,
+          image: identity.avatarUrl,
+        });
+        return {
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          image: dbUser.image,
+          githubLogin: identity.login,
+          pat,
+        };
+      },
+    }),
     ...(demoAuthEnabled()
       ? [
           CredentialsProvider({
@@ -71,45 +126,42 @@ export const authOptions: NextAuthOptions = {
             : "";
         const githubId = String(account.providerAccountId);
         const email = token.email || user?.email || null;
-        const dbUser = await prisma.user.upsert({
-          where: { githubId },
-          update: {
-            name: user?.name || token.name,
-            email,
-            image: user?.image || (token.picture as string | undefined),
-            githubLogin: login,
-            isDemo: false,
-          },
-          create: {
-            githubId,
-            githubLogin: login,
-            name: user?.name || login,
-            email,
-            image: user?.image,
-            isDemo: false,
-          },
+        const dbUser = await upsertGithubUser({
+          githubId,
+          login,
+          name: user?.name || token.name,
+          email,
+          image: user?.image || (token.picture as string | undefined),
         });
         token.userId = dbUser.id;
         token.accessToken = account.access_token;
         token.githubLogin = login;
         token.isDemo = false;
+        delete token.pat;
+      }
+      if (account?.provider === "github-pat" && user?.id) {
+        Object.assign(
+          token,
+          applyGithubPatToJwt(token, {
+            id: user.id,
+            githubLogin: user.githubLogin,
+            pat: user.pat,
+          }),
+        );
+        delete user.pat;
+        delete token.pat;
       }
       if (account?.provider === "demo" && user?.id) {
         token.userId = user.id;
         token.isDemo = true;
         token.githubLogin = typeof user.email === "string" ? user.email : "demo";
         delete token.accessToken;
+        delete token.pat;
       }
       return token;
     },
     async session({ session, token }) {
-      session.userId = token.userId as string | undefined;
-      session.isDemo = Boolean(token.isDemo);
-      session.githubLogin = token.githubLogin as string | undefined;
-      if (session.user) {
-        session.user.name = session.user.name || (token.githubLogin as string) || "User";
-      }
-      return session;
+      return buildClientSession(session, token);
     },
   },
 };
@@ -144,6 +196,12 @@ declare module "next-auth" {
     isDemo?: boolean;
     githubLogin?: string;
   }
+
+  interface User {
+    githubLogin?: string;
+    /** Transient PAT copied onto the JWT as accessToken — never on session. */
+    pat?: string;
+  }
 }
 
 declare module "next-auth/jwt" {
@@ -152,5 +210,6 @@ declare module "next-auth/jwt" {
     accessToken?: string;
     isDemo?: boolean;
     githubLogin?: string;
+    pat?: string;
   }
 }

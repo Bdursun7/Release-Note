@@ -6,7 +6,7 @@ Desktop web app. Turkish and English. Single workspace per signed-in user.
 
 ## What you get
 
-1. Connect GitHub (GitHub App user OAuth preferred; classic OAuth App also works) **or** use the built-in sample repo
+1. Connect GitHub with a **personal access token** (recommended locally) or optional OAuth **or** use the built-in sample repo
 2. Pick repository, branch, and range: **two refs** (GitHub Compare `base...head`) or **last N commits** (default 50, 1–500)
 3. Curate: ~90% pre-selected (merge / chore / deps noise dropped), bulk include/exclude, merge into groups, LLM group suggestions with Apply/Ignore
 4. Generate a brief in the UI language (optional override)
@@ -26,12 +26,12 @@ Commit **messages** stay in their source language. Headings, summary, and skelet
 
 - Next.js 15 (App Router) + TypeScript
 - PostgreSQL + Prisma
-- NextAuth (GitHub OAuth; optional isolated demo credentials in development)
+- NextAuth (GitHub PAT or OAuth; optional isolated demo credentials in development)
 - Octokit (`@octokit/rest`) — Compare API uses **three-dot** `base...head`
 - OpenAI-compatible LLM (env for GitHub users, or BYOK) with a heuristic fallback
 - `pdf-lib` (embedded IBM Plex Sans, so Turkish glyphs work) + `docx`
 
-## Quick start (demo, no GitHub App)
+## Quick start
 
 Requires Node 20+ and PostgreSQL 16.
 
@@ -52,7 +52,11 @@ npm test
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) → **Try sample repo** → last N commits → curate → generate → export.
+Open [http://localhost:3000](http://localhost:3000).
+
+**Real repos (local dogfood):** **Connect GitHub** → paste a classic or fine-grained [personal access token](https://docs.github.com/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token). You do **not** need `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`. Then pick a repo → last N or two refs → curate → generate → export.
+
+**Sample repo (no GitHub):** **Try sample repo** → last N commits → curate → generate → export.
 
 The sample history is `acme/checkout-service` (fixture commits). Named refs such as `v1.4.0` and `main` are honored (not the whole fixture). Demo mode never calls GitHub. In production, sample sign-in stays off unless `ALLOW_DEMO_AUTH=true`.
 
@@ -63,8 +67,8 @@ The sample history is `acme/checkout-service` (fixture commits). Named refs such
 | `DATABASE_URL` | yes | PostgreSQL connection string |
 | `NEXTAUTH_URL` | yes | App origin, e.g. `http://localhost:3000` |
 | `NEXTAUTH_SECRET` | yes | Session signing secret |
-| `GITHUB_CLIENT_ID` | for real repos | GitHub App or OAuth App client ID |
-| `GITHUB_CLIENT_SECRET` | for real repos | Matching client secret |
+| `GITHUB_CLIENT_ID` | no | OAuth App / GitHub App client ID. Optional if you connect with a PAT. |
+| `GITHUB_CLIENT_SECRET` | no | Matching client secret. Optional if you connect with a PAT. |
 | `GITHUB_SCOPE` | no | Default `read:user public_repo` (read-only public). Classic OAuth has **no private read-only scope**; set `read:user repo` only if you need private repos. Prefer a GitHub App with **Contents: Read-only**. |
 | `ALLOW_DEMO_AUTH` | no | Sample-repo sign-in. Default **on** in development, **off** in production. Set `true` to enable on a deploy. Each click creates an isolated user (not a shared `demo@` account). Demo never uses `OPENAI_API_KEY`; BYOK is rate-limited. |
 | `OPENAI_API_KEY` | no | Server-side LLM key for **GitHub-signed-in** users. If empty, grouping + synthesis use heuristics. Not used for demo sessions. |
@@ -74,9 +78,27 @@ The sample history is `acme/checkout-service` (fixture commits). Named refs such
 
 BYOK: on the generate screen you can paste an OpenAI-compatible key. It is stored **only in this browser** (`localStorage`) and sent for that request; it is not written to the database. Demo/sample sessions that send BYOK are rate-limited (per user, IP, and globally).
 
-## GitHub: App (preferred) or OAuth App
+## GitHub: personal access token (recommended locally)
 
-NextAuth uses the GitHub **OAuth user flow**. A GitHub App’s Client ID / Client Secret work for that flow and are preferred because permissions are least-privilege.
+You can list your repos without registering an OAuth app.
+
+1. GitHub → **Settings** → **Developer settings** → [Personal access tokens](https://docs.github.com/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
+2. Create a **classic** or **fine-grained** token
+   - Classic, public repos: `public_repo` (and `read:user` is implied for `/user`)
+   - Classic, private repos: `repo`
+   - Fine-grained: grant the repositories you want; **Contents: Read-only**, **Metadata: Read-only**
+3. On the landing page, paste the token and connect
+4. The token is validated with GitHub `GET /user`, then stored **only on the server** in the encrypted NextAuth JWT (same as OAuth `accessToken`). `/api/auth/session` never includes it. Sign out clears it.
+
+If `GITHUB_CLIENT_ID` is empty, **Connect GitHub** uses this PAT flow instead of sending you to a broken GitHub authorize URL.
+
+## GitHub OAuth App (optional, production-like login)
+
+NextAuth can also use the GitHub **OAuth user flow**. A GitHub App’s Client ID / Client Secret work for that flow and are preferred for one-click login because permissions are least-privilege. This is optional when PAT is enough.
+
+Callback URL: `{NEXTAUTH_URL}/api/auth/callback/github` (e.g. `http://localhost:3000/api/auth/callback/github`).
+
+If Client ID / secret are missing or invalid, the app **does not** redirect to GitHub’s 404 page. You get an in-app error and the PAT form.
 
 ### GitHub App
 
@@ -98,7 +120,17 @@ NextAuth uses the GitHub **OAuth user flow**. A GitHub App’s Client ID / Clien
 4. Copy client ID / secret into the same env vars
 5. Default scopes are `read:user public_repo`. Private repositories require `GITHUB_SCOPE=read:user repo` because classic OAuth has no private read-only scope — prefer a GitHub App instead.
 
-If these env vars are empty, the UI hides a working GitHub button and tells you to use the sample repo (this is how CI / first-run works without registering an app).
+If these env vars are empty, **Connect GitHub** still works via PAT. Sample-repo sign-in remains available in development.
+
+### Empty repository list
+
+`/api/repos` calls GitHub `repos.listForAuthenticatedUser` with the server-side token. An empty list usually means:
+
+- Fine-grained PAT / GitHub App does not include those repositories (install the app, or grant the token access)
+- Classic OAuth / PAT is missing `repo` (private) or `public_repo` (public). Operators can set `GITHUB_SCOPE=read:user repo` for OAuth
+- Session has no token (sign out and connect again with PAT or OAuth)
+
+The repos screen explains this instead of showing a blank “no matches” row.
 
 ## Architecture
 

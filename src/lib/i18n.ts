@@ -16,7 +16,22 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
       "Connect GitHub, pick a range, curate in under two minutes, and export a ship brief as PDF, Word, or Markdown. Chore noise stays out. Outcomes stay in.",
     "landing.connect": "Connect GitHub",
     "landing.demo": "Try sample repo",
-    "landing.githubMissing": "GitHub OAuth is not configured. Use the sample repo, or add GITHUB_CLIENT_ID in .env — see README.",
+    "landing.githubMissing":
+      "GitHub OAuth is optional. Paste a personal access token, or add GITHUB_CLIENT_ID in .env for one-click OAuth — see README.",
+    "landing.oauthUnavailable":
+      "No GitHub OAuth app is configured here. Paste a personal access token — no app registration needed.",
+    "landing.oauthError":
+      "Could not start GitHub login. Use a personal access token, or check GITHUB_CLIENT_ID on the server (see README).",
+    "landing.usePatInstead": "Or paste a personal access token",
+    "landing.patLabel": "Personal access token",
+    "landing.patPlaceholder": "ghp_… or github_pat_…",
+    "landing.patHint":
+      "Classic or fine-grained. Public repos: public_repo (classic) or Contents: Read (fine-grained). Private repos need the repo scope or Contents: Read on those repositories.",
+    "landing.patHow": "How to create a token",
+    "landing.patServer": "The token stays on the server in your encrypted session. It is never sent back to the browser.",
+    "landing.patSubmit": "Continue with token",
+    "landing.patBusy": "Checking token…",
+    "landing.patInvalid": "GitHub rejected that token. Check that it is current and has repository access.",
     "landing.demoMissing": "Sample-repo sign-in is disabled in production. Set ALLOW_DEMO_AUTH=true or connect GitHub.",
     "landing.point1": "Pre-selects ~90% of commits, dropping merge/chore/deps noise",
     "landing.point2": "Group, exclude, and apply LLM suggestions without touching git",
@@ -26,6 +41,13 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "repos.subtitle": "Briefs stay in your workspace. Nothing is published.",
     "repos.search": "Filter repositories",
     "repos.empty": "No repositories matched.",
+    "repos.emptySearch": "No repositories matched.",
+    "repos.loading": "Loading repositories…",
+    "repos.emptyGithub": "No repositories came back from GitHub.",
+    "repos.emptyGithubHint":
+      "If you expected a list: install the GitHub App on those accounts, grant the token access to the repos, or sign in again. Private repos need the repo scope (classic) or Contents: Read (fine-grained / GitHub App). Operators can set GITHUB_SCOPE=read:user repo for OAuth.",
+    "repos.emptyNoToken":
+      "This session has no GitHub token. Sign out, then connect with a personal access token or GitHub OAuth.",
     "repos.private": "Private",
     "repos.updated": "Updated",
     "repos.newDraft": "New brief",
@@ -121,7 +143,22 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
       "GitHub bağlayın, aralığı seçin, iki dakikanın altında süzün; PDF, Word veya Markdown olarak dışa aktarın. Gürültü dışarıda, sonuç içeride kalır.",
     "landing.connect": "GitHub bağla",
     "landing.demo": "Örnek depo dene",
-    "landing.githubMissing": "GitHub OAuth yapılandırılmadı. Örnek depoyu kullanın veya README’deki gibi GITHUB_CLIENT_ID ekleyin.",
+    "landing.githubMissing":
+      "GitHub OAuth isteğe bağlı. Kişisel erişim jetonu yapıştırın veya tek tık OAuth için .env’e GITHUB_CLIENT_ID ekleyin — README’ye bakın.",
+    "landing.oauthUnavailable":
+      "Burada GitHub OAuth uygulaması yok. Kişisel erişim jetonu yapıştırın — uygulama kaydı gerekmez.",
+    "landing.oauthError":
+      "GitHub oturumu başlatılamadı. Kişisel erişim jetonu kullanın veya sunucudaki GITHUB_CLIENT_ID değerini kontrol edin (README).",
+    "landing.usePatInstead": "Veya kişisel erişim jetonu yapıştırın",
+    "landing.patLabel": "Kişisel erişim jetonu",
+    "landing.patPlaceholder": "ghp_… veya github_pat_…",
+    "landing.patHint":
+      "Klasik veya fine-grained. Genel depolar: public_repo (klasik) veya Contents: Read (fine-grained). Özel depolar için repo kapsamı veya o depolarda Contents: Read gerekir.",
+    "landing.patHow": "Jeton nasıl oluşturulur",
+    "landing.patServer": "Jeton yalnızca sunucuda, şifreli oturumunuzda saklanır. Tarayıcıya geri gönderilmez.",
+    "landing.patSubmit": "Jetonla devam et",
+    "landing.patBusy": "Jeton doğrulanıyor…",
+    "landing.patInvalid": "GitHub bu jetonu reddetti. Güncel olduğundan ve depo erişimi olduğundan emin olun.",
     "landing.demoMissing": "Üretimde örnek depo oturumu kapalı. ALLOW_DEMO_AUTH=true yapın veya GitHub bağlayın.",
     "landing.point1": "Birleştirme/chore/deps gürültüsünü düşürerek commit’lerin ~%90’ını ön-seçer",
     "landing.point2": "Git’e dokunmadan gruplayın, çıkarın, LLM önerilerini uygulayın",
@@ -131,6 +168,13 @@ export const dictionaries: Record<Locale, Record<string, string>> = {
     "repos.subtitle": "Özetler çalışma alanınızda kalır. Hiçbir şey yayınlanmaz.",
     "repos.search": "Depoları süz",
     "repos.empty": "Eşleşen depo yok.",
+    "repos.emptySearch": "Eşleşen depo yok.",
+    "repos.loading": "Depolar yükleniyor…",
+    "repos.emptyGithub": "GitHub’dan depo dönmedi.",
+    "repos.emptyGithubHint":
+      "Liste bekliyorsanız: GitHub App’i o hesaplara kurun, jetona depo erişimi verin veya yeniden oturum açın. Özel depolar için klasik repo kapsamı veya Contents: Read (fine-grained / GitHub App) gerekir. OAuth için GITHUB_SCOPE=read:user repo ayarlanabilir.",
+    "repos.emptyNoToken":
+      "Bu oturumda GitHub jetonu yok. Çıkış yapıp kişisel erişim jetonu veya GitHub OAuth ile yeniden bağlanın.",
     "repos.private": "Özel",
     "repos.updated": "Güncelleme",
     "repos.newDraft": "Yeni özet",

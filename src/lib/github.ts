@@ -14,8 +14,52 @@ export function githubOAuthScopes(): string {
   return process.env.GITHUB_SCOPE || "read:user public_repo";
 }
 
-export function githubConfigured(): boolean {
-  return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+export function githubConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.GITHUB_CLIENT_ID?.trim() && env.GITHUB_CLIENT_SECRET?.trim());
+}
+
+export type GithubIdentity = {
+  id: number;
+  login: string;
+  name: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+};
+
+/** Validate a classic or fine-grained PAT via GET /user. Does not persist the token. */
+export async function validateGithubPat(
+  token: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubIdentity | null> {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+  const res = await fetchImpl("https://api.github.com/user", {
+    headers: {
+      Authorization: `Bearer ${trimmed}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "ship-brief-builder",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    id?: unknown;
+    login?: unknown;
+    name?: unknown;
+    email?: unknown;
+    avatar_url?: unknown;
+  };
+  if (typeof data.id !== "number" || typeof data.login !== "string" || !data.login) {
+    return null;
+  }
+  return {
+    id: data.id,
+    login: data.login,
+    name: typeof data.name === "string" ? data.name : null,
+    email: typeof data.email === "string" ? data.email : null,
+    avatarUrl: typeof data.avatar_url === "string" ? data.avatar_url : null,
+  };
 }
 
 export function mockForced(): boolean {
@@ -54,7 +98,8 @@ export async function listRepos(opts: {
   token?: string | null;
   isDemo: boolean;
 }): Promise<RepoSummary[]> {
-  if (opts.isDemo || mockForced() || !opts.token) return demoRepos;
+  if (opts.isDemo || mockForced()) return demoRepos;
+  if (!opts.token) return [];
   const client = octokit(opts.token);
   const repos = await client.paginate(client.repos.listForAuthenticatedUser, {
     per_page: 100,
@@ -80,7 +125,8 @@ export async function listBranches(opts: {
   owner: string;
   repo: string;
 }): Promise<BranchSummary[]> {
-  if (opts.isDemo || mockForced() || !opts.token) return demoBranches;
+  if (opts.isDemo || mockForced()) return demoBranches;
+  if (!opts.token) return [];
   const client = octokit(opts.token);
   const branches = await client.paginate(client.repos.listBranches, {
     owner: opts.owner,
