@@ -8,10 +8,11 @@ import { Button, ErrorBanner, TextInput, WarningBanner } from "@/components/ui";
 import {
   PAGE_SIZE,
   applySuggestion,
+  excludeNoise,
   groupedShaSet,
   leftOutCount,
   mergeShasIntoGroup,
-  recommendedSelection,
+  noiseShas,
   setSelected,
   ungroupShas,
 } from "@/lib/curation";
@@ -50,6 +51,7 @@ export function CurateScreen({ draftId }: { draftId: string }) {
   const [suggesting, setSuggesting] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [repoLabel, setRepoLabel] = useState("");
+  const [noiseNote, setNoiseNote] = useState<number | null>(null);
   const [suggestFallback, setSuggestFallback] = useState<LlmFallbackReason | null>(null);
 
   useEffect(() => {
@@ -143,6 +145,19 @@ export function CurateScreen({ draftId }: { draftId: string }) {
     return pageRows.filter((row): row is Extract<Row, { kind: "commit" }> => row.kind === "commit").map((row) => row.commit.sha);
   }
 
+  function removeNoise() {
+    const shas = noiseShas(commits);
+    const removed = shas.filter((sha) => curation.selected[sha]).length;
+    setChecked((prev) => {
+      const next = { ...prev };
+      for (const sha of shas) next[sha] = false;
+      return next;
+    });
+    setShowExcluded(true);
+    setNoiseNote(removed);
+    void persist(excludeNoise(commits, curation));
+  }
+
   async function runSuggest() {
     setSuggesting(true);
     setSuggestFallback(null);
@@ -169,9 +184,12 @@ export function CurateScreen({ draftId }: { draftId: string }) {
       <AppHeader compact />
       <main className="mx-auto max-w-6xl px-4 py-8 md:px-6">
         <p className="font-mono text-xs uppercase tracking-widest text-copper">{repoLabel}</p>
-        <div className="mt-2">
-          <h1 className="font-serif text-3xl">{t("curate.title")}</h1>
-          <p className="mt-2 max-w-2xl text-sm text-ink-muted">{t("curate.subtitle")}</p>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-3xl tracking-tight">{t("curate.title")}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">{t("curate.subtitle")}</p>
+          </div>
+          <Button onClick={() => router.push(`/drafts/${draftId}/generate`)}>{t("curate.continue")}</Button>
         </div>
         <div className="mt-4 space-y-3">
           <ErrorBanner message={error} />
@@ -179,12 +197,12 @@ export function CurateScreen({ draftId }: { draftId: string }) {
         </div>
 
         {suggestions.length > 0 ? (
-          <section className="mt-6 border border-sea/20 bg-sea-mist/60 p-4">
+          <section className="paper-card mt-6 p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-serif text-lg">{t("suggest.title")}</h2>
               <div className="flex gap-2">
                 <Button
-                  variant="ink"
+                  variant="ghost"
                   onClick={async () => {
                     let next = curation;
                     for (const suggestion of suggestions) next = applySuggestion(next, suggestion);
@@ -200,7 +218,7 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             </div>
             <ul className="mt-3 space-y-2">
               {suggestions.map((suggestion) => (
-                <li key={suggestion.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <li key={suggestion.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-paper-recede/40 px-3 py-2 text-sm">
                   <span>
                     <strong>{suggestion.title}</strong>{" "}
                     <span className="text-ink-muted">({suggestion.shas.length})</span>
@@ -228,37 +246,37 @@ export function CurateScreen({ draftId }: { draftId: string }) {
           </section>
         ) : null}
 
-        <div className="sticky-bulk mt-6 flex flex-wrap items-center gap-2 px-3 py-3">
+        <div className="sticky-bulk mt-6 flex flex-wrap items-center gap-2 px-4 py-3">
           <span className="font-mono text-xs uppercase tracking-wider text-ink-muted">
             {t("curate.included", { n: included })} · {t("curate.leftOut", { n: left })}
+            {selectedShas.length ? ` · ${t("curate.selected", { n: selectedShas.length })}` : ""}
           </span>
-          <div className="ml-auto flex flex-wrap gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => persist({ ...curation, selected: recommendedSelection(commits) })}
-            >
-              {t("curate.applyFilter")}
-            </Button>
-            <Button variant="ghost" disabled={suggesting} onClick={() => void runSuggest()}>
-              {suggesting ? t("curate.suggesting") : t("curate.suggest")}
-            </Button>
-            <Button onClick={() => router.push(`/drafts/${draftId}/generate`)}>{t("curate.continue")}</Button>
-          </div>
-        </div>
-
-        {selectedShas.length > 0 ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border border-line bg-paper-raised px-3 py-2">
-            <span className="font-mono text-xs uppercase tracking-wider text-ink-muted">
-              {t("curate.selected", { n: selectedShas.length })}
+          {noiseNote !== null ? (
+            <span className="rounded-full bg-copper/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-copper" role="status">
+              {t("curate.noiseRemoved", { n: noiseNote })}
             </span>
+          ) : null}
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button variant="ghost" onClick={() => {
+              const next: Record<string, boolean> = { ...checked };
+              for (const sha of visibleCommitShas()) next[sha] = true;
+              setChecked(next);
+            }}>
+              {t("curate.selectAll")}
+            </Button>
+            <Button variant="ghost" onClick={() => setChecked({})}>
+              {t("curate.deselectAll")}
+            </Button>
             <Button
               variant="ghost"
+              disabled={!selectedShas.length}
               onClick={() => persist(setSelected(curation, selectedShas, true))}
             >
               {t("curate.include")}
             </Button>
             <Button
               variant="danger"
+              disabled={!selectedShas.length}
               onClick={() => persist(setSelected(curation, selectedShas, false))}
             >
               {t("curate.exclude")}
@@ -271,7 +289,7 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             />
             <Button
               variant="ghost"
-              disabled={!groupName.trim()}
+              disabled={!selectedShas.length || !groupName.trim()}
               onClick={() => {
                 persist(mergeShasIntoGroup(curation, selectedShas, groupName.trim()));
                 setGroupName("");
@@ -280,13 +298,23 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             >
               {t("curate.group")}
             </Button>
-            <Button variant="ghost" onClick={() => persist(ungroupShas(curation, selectedShas))}>
+            <Button
+              variant="ghost"
+              disabled={!selectedShas.length}
+              onClick={() => persist(ungroupShas(curation, selectedShas))}
+            >
               {t("curate.ungroup")}
             </Button>
+            <Button variant="ghost" onClick={removeNoise}>
+              {t("curate.removeNoise")}
+            </Button>
+            <Button variant="ink" disabled={suggesting} onClick={() => void runSuggest()}>
+              {suggesting ? t("curate.suggesting") : t("curate.suggest")}
+            </Button>
           </div>
-        ) : null}
+        </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <TextInput
             value={query}
             onChange={(e) => {
@@ -305,30 +333,10 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             />
             {t("curate.showExcluded")}
           </label>
-          <button
-            type="button"
-            className="text-xs text-ink-muted underline decoration-line underline-offset-2 hover:text-ink"
-            onClick={() => {
-              const next: Record<string, boolean> = { ...checked };
-              for (const sha of visibleCommitShas()) next[sha] = true;
-              setChecked(next);
-            }}
-          >
-            {t("curate.selectAll")}
-          </button>
-          {selectedShas.length ? (
-            <button
-              type="button"
-              className="text-xs text-ink-muted underline decoration-line underline-offset-2 hover:text-ink"
-              onClick={() => setChecked({})}
-            >
-              {t("curate.deselectAll")}
-            </button>
-          ) : null}
         </div>
 
-        <div className="mt-4 overflow-hidden border border-line bg-paper-raised">
-          <div className="grid grid-cols-[auto_5.5rem_1fr_9rem_7rem] gap-2 border-b border-line bg-paper-recede px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-ink-muted">
+        <div className="curate-table mt-4">
+          <div className="grid grid-cols-[auto_5.5rem_1fr_9rem_7rem] gap-2 border-b border-line bg-paper-recede/70 px-4 py-2.5 font-mono text-[10px] uppercase tracking-wider text-ink-muted">
             <span />
             <span>{t("curate.hash")}</span>
             <span>{t("curate.message")}</span>
@@ -344,12 +352,12 @@ export function CurateScreen({ draftId }: { draftId: string }) {
             <ul>
               {pageRows.map((row) =>
                 row.kind === "group" ? (
-                  <li key={`g-${row.groupId}`} className="border-b border-line bg-sea-mist/40">
-                    <div className="grid grid-cols-[auto_5.5rem_1fr] items-center gap-2 px-3 py-2">
+                  <li key={`g-${row.groupId}`} className="border-b border-line bg-sea-mist/70">
+                    <div className="grid grid-cols-[auto_5.5rem_1fr] items-center gap-2 px-4 py-2.5">
                       <input
                         type="checkbox"
                         aria-label={row.title}
-                        checked={row.shas.every((sha) => checked[sha])}
+                        checked={row.shas.length > 0 && row.shas.every((sha) => checked[sha])}
                         onChange={(e) => {
                           const next = { ...checked };
                           for (const sha of row.shas) next[sha] = e.target.checked;
@@ -371,7 +379,7 @@ export function CurateScreen({ draftId }: { draftId: string }) {
                         {row.collapsed ? "▸" : "▾"} {row.shas.length}
                       </button>
                       <div className="flex items-center justify-between gap-2">
-                        <strong>{row.title}</strong>
+                        <strong className="tracking-tight">{row.title}</strong>
                         <span className="text-xs text-ink-faint">
                           {row.collapsed ? t("curate.expand") : t("curate.collapse")}
                         </span>
@@ -381,9 +389,9 @@ export function CurateScreen({ draftId }: { draftId: string }) {
                 ) : (
                   <li
                     key={row.commit.sha}
-                    className={`grid grid-cols-[auto_5.5rem_1fr_9rem_7rem] items-center gap-2 border-b border-line/70 px-3 py-2 text-sm ${
-                      curation.selected[row.commit.sha] ? "" : "opacity-45"
-                    }`}
+                    className={`grid grid-cols-[auto_5.5rem_1fr_9rem_7rem] items-center gap-2 border-b border-line/70 px-4 py-2.5 text-sm transition hover:bg-paper-recede/40 ${
+                      row.groupId ? "bg-sea-mist/25 pl-8" : ""
+                    } ${curation.selected[row.commit.sha] ? "" : "opacity-45"}`}
                   >
                     <input
                       type="checkbox"

@@ -44,11 +44,10 @@ export type GroupSuggestion = {
 
 export type BriefSectionKey = "improvements" | "bugFixes" | "other";
 
-/** One named cluster under a category, or a standalone change when title is null. */
-export type BriefSectionGroup = {
-  title: string | null;
-  bullets: string[];
-};
+/** Group title with nested outcomes, or a standalone ungrouped bullet. */
+export type BriefBlock =
+  | { type: "item"; text: string }
+  | { type: "group"; title: string; items: string[] };
 
 export type LlmFallbackReason = "no_key" | "llm_error";
 
@@ -56,7 +55,7 @@ export type BriefDocument = {
   title: string;
   summary: string;
   locale: Locale;
-  sections: Record<BriefSectionKey, BriefSectionGroup[]>;
+  sections: Record<BriefSectionKey, BriefBlock[]>;
   stats: {
     commitCount: number;
     authors: string[];
@@ -86,4 +85,8 @@ export type RepoSummary = {
 export type BranchSummary = {
   name: string;
   protected: boolean;
+};
+
+export type TagSummary = {
+  name: string;
 };

@@ -5,10 +5,29 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { useI18n } from "@/components/i18n-provider";
 import { Button, ErrorBanner, WarningBanner } from "@/components/ui";
-import { footnote, llmFallbackMessageKey, normalizeBrief, sectionHeading } from "@/lib/brief-format";
-import type { BriefDocument, BriefSectionKey } from "@/types/brief";
+import { footnote, llmFallbackMessageKey, normalizeBrief, sectionBlocks, sectionHeading, SECTION_ORDER } from "@/lib/brief-format";
+import type { BriefBlock, BriefDocument } from "@/types/brief";
 
-const ORDER: BriefSectionKey[] = ["improvements", "bugFixes", "other"];
+function BlockList({ blocks }: { blocks: BriefBlock[] }) {
+  return (
+    <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed">
+      {blocks.map((block, index) =>
+        block.type === "item" ? (
+          <li key={`item-${index}`}>{block.text}</li>
+        ) : (
+          <li key={`group-${index}`}>
+            <span className="font-medium">{block.title}</span>
+            <ul className="mt-1.5 list-disc space-y-1.5 pl-5 text-ink">
+              {block.items.map((item, child) => (
+                <li key={`child-${index}-${child}`}>{item}</li>
+              ))}
+            </ul>
+          </li>
+        ),
+      )}
+    </ul>
+  );
+}
 
 export function BriefScreen({ draftId }: { draftId: string }) {
   const { t } = useI18n();
@@ -72,24 +91,13 @@ export function BriefScreen({ draftId }: { draftId: string }) {
               </div>
               <h1 className="mt-3 text-3xl leading-tight">{brief.title}</h1>
               <p className="mt-5 text-[15px] leading-relaxed text-ink">{brief.summary}</p>
-              {ORDER.map((key) => {
-                const groups = brief.sections[key];
-                if (!groups.length) return null;
+              {SECTION_ORDER.map((key) => {
+                const items = sectionBlocks(brief.sections, key);
+                if (!items.length) return null;
                 return (
                   <section key={key} className="mt-8">
                     <h2 className="font-serif text-xl text-copper">{sectionHeading(brief.locale, key)}</h2>
-                    {groups.map((group, groupIndex) => (
-                      <div key={`${key}-${groupIndex}`} className="mt-4">
-                        {group.title ? (
-                          <h3 className="font-serif text-base text-ink">{group.title}</h3>
-                        ) : null}
-                        <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-relaxed">
-                          {group.bullets.map((item, index) => (
-                            <li key={`${key}-${groupIndex}-${index}`}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
+                    <BlockList blocks={items} />
                   </section>
                 );
               })}

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { githubConfigured, listRepos, validateGithubPat } from "./github";
-import { demoRepos } from "./mock-data";
+import { githubConfigured, listRepos, listTags, validateGithubPat } from "./github";
+import { demoRepos, demoTags } from "./mock-data";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -58,5 +58,11 @@ describe("listRepos", () => {
   it("returns an empty list for GitHub users without a token (not demo fixtures)", async () => {
     await expect(listRepos({ isDemo: false })).resolves.toEqual([]);
     await expect(listRepos({ isDemo: false, token: null })).resolves.toEqual([]);
+  });
+});
+
+describe("listTags", () => {
+  it("returns demo tags for demo sessions", async () => {
+    await expect(listTags({ isDemo: true, owner: "acme", repo: "checkout-service" })).resolves.toEqual(demoTags);
   });
 });

@@ -3,46 +3,30 @@ import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { BriefDocument, BriefSectionGroup, BriefSectionKey } from "@/types/brief";
-import { footnote, normalizeBrief, sectionHeading } from "@/lib/brief-format";
+import type { BriefBlock, BriefDocument } from "@/types/brief";
+import { footnote, normalizeBrief, sectionBlocks, sectionHeading, SECTION_ORDER } from "@/lib/brief-format";
 import { t } from "@/lib/i18n";
-
-const SECTION_ORDER: BriefSectionKey[] = ["improvements", "bugFixes", "other"];
 
 function brandName(brief: BriefDocument): string {
   return t(brief.locale, "brand.name");
 }
 
-function renderGroupsMarkdown(groups: BriefSectionGroup[]): string[] {
-  const lines: string[] = [];
-  for (const group of groups) {
-    if (group.title) {
-      lines.push(`### ${group.title}`, "");
-    }
-    for (const bullet of group.bullets) lines.push(`- ${bullet}`);
-    lines.push("");
-  }
-  return lines;
+function markdownForBlock(block: BriefBlock): string[] {
+  if (block.type === "item") return [`- ${block.text}`];
+  return [`- **${block.title}**`, ...block.items.map((item) => `  - ${item}`)];
 }
 
 export function briefToMarkdown(brief: BriefDocument): string {
   const doc = normalizeBrief(brief);
   const lines: string[] = [`# ${doc.title}`, "", doc.summary, ""];
   for (const key of SECTION_ORDER) {
-    const groups = doc.sections[key];
-    if (!groups.length) continue;
+    const items = sectionBlocks(doc.sections, key);
+    if (!items.length) continue;
     lines.push(`## ${sectionHeading(doc.locale, key)}`, "");
-    lines.push(...renderGroupsMarkdown(groups));
+    for (const item of items) lines.push(...markdownForBlock(item));
+    lines.push("");
   }
-  lines.push(
-    "---",
-    "",
-    `_${footnote(doc)}_`,
-    "",
-    `<details>`,
-    `<summary>${doc.locale === "tr" ? "Kaynak commit’ler" : "Source commits"}</summary>`,
-    "",
-  );
+  lines.push("---", "", `_${footnote(doc)}_`, "", `<details>`, `<summary>${doc.locale === "tr" ? "Kaynak commit’ler" : "Source commits"}</summary>`, "");
   for (const entry of doc.appendix) {
     lines.push(`- \`${entry.sha}\` ${entry.message}`);
   }
@@ -66,28 +50,35 @@ export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
     }),
   ];
   for (const key of SECTION_ORDER) {
-    const groups = doc.sections[key];
-    if (!groups.length) continue;
+    const items = sectionBlocks(doc.sections, key);
+    if (!items.length) continue;
     children.push(
       new Paragraph({
         text: sectionHeading(doc.locale, key),
         heading: HeadingLevel.HEADING_1,
       }),
     );
-    for (const group of groups) {
-      if (group.title) {
+    for (const item of items) {
+      if (item.type === "item") {
         children.push(
           new Paragraph({
-            text: group.title,
-            heading: HeadingLevel.HEADING_2,
+            text: item.text,
+            numbering: { reference: "brief-bullets", level: 0 },
           }),
         );
+        continue;
       }
-      for (const bullet of group.bullets) {
+      children.push(
+        new Paragraph({
+          children: [new TextRun({ text: item.title, bold: true })],
+          numbering: { reference: "brief-bullets", level: 0 },
+        }),
+      );
+      for (const child of item.items) {
         children.push(
           new Paragraph({
-            text: bullet,
-            bullet: { level: 0 },
+            text: child,
+            numbering: { reference: "brief-bullets", level: 1 },
           }),
         );
       }
@@ -124,13 +115,29 @@ export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
     numbering: {
       config: [
         {
-          reference: "bullets",
+          reference: "brief-bullets",
           levels: [
             {
               level: 0,
               format: LevelFormat.BULLET,
               text: "•",
               alignment: "left",
+              style: {
+                paragraph: {
+                  indent: { left: 360, hanging: 180 },
+                },
+              },
+            },
+            {
+              level: 1,
+              format: LevelFormat.BULLET,
+              text: "◦",
+              alignment: "left",
+              style: {
+                paragraph: {
+                  indent: { left: 720, hanging: 180 },
+                },
+              },
             },
           ],
         },
@@ -208,6 +215,26 @@ export async function briefToPdf(brief: BriefDocument): Promise<Buffer> {
     }
   };
 
+  const writeBullet = (
+    text: string,
+    level: number,
+    font: typeof regular = regular,
+    size = 11,
+  ) => {
+    const indent = margin + level * 18;
+    const width = pageSize[0] - margin - indent - 14;
+    const lines = wrap(text, font, size, width);
+    for (let i = 0; i < lines.length; i += 1) {
+      ensure(size + 5);
+      if (i === 0) {
+        page.drawText(level === 0 ? "•" : "–", { x: indent, y, size, font: regular, color: ink });
+      }
+      page.drawText(lines[i], { x: indent + 14, y, size, font, color: ink });
+      y -= size + 5;
+    }
+    y -= 3;
+  };
+
   page.drawRectangle({
     x: 0,
     y: page.getHeight() - 8,
@@ -224,29 +251,17 @@ export async function briefToPdf(brief: BriefDocument): Promise<Buffer> {
   y -= 10;
 
   for (const key of SECTION_ORDER) {
-    const groups = doc.sections[key];
-    if (!groups.length) continue;
+    const items = sectionBlocks(doc.sections, key);
+    if (!items.length) continue;
     writeWrapped(sectionHeading(doc.locale, key), bold, 13, copper, 6);
     y -= 2;
-    for (const group of groups) {
-      if (group.title) {
-        writeWrapped(group.title, bold, 11, ink, 5);
-        y -= 2;
+    for (const item of items) {
+      if (item.type === "item") {
+        writeBullet(item.text, 0);
+        continue;
       }
-      for (const item of group.bullets) {
-        const width = pageSize[0] - margin * 2 - 14;
-        const lines = wrap(item, regular, 11, width);
-        for (let i = 0; i < lines.length; i += 1) {
-          ensure(16);
-          if (i === 0) {
-            page.drawText("•", { x: margin, y, size: 11, font: regular, color: ink });
-          }
-          page.drawText(lines[i], { x: margin + 14, y, size: 11, font: regular, color: ink });
-          y -= 16;
-        }
-        y -= 4;
-      }
-      y -= 6;
+      writeBullet(item.title, 0, bold, 11);
+      for (const child of item.items) writeBullet(child, 1);
     }
     y -= 8;
   }

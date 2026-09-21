@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       branch: body.data.defaultBranch,
       headRef: body.data.defaultBranch,
       baseRef: source === "demo" ? "v1.4.0" : null,
-      rangeType: "lastN",
+      rangeType: "refs",
       lastN: 50,
       status: "range",
     },
