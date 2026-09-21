@@ -7,7 +7,7 @@ Desktop web app. Turkish and English. Single workspace per signed-in user.
 ## What you get
 
 1. Connect GitHub with a **personal access token** (recommended locally) or optional OAuth **or** use the built-in sample repo
-2. Pick repository, branch, and range: **two refs** (GitHub Compare `base...head`) or **last N commits** (default 50, 1–500)
+2. Pick repository, branch, and range: **base...head** (recommended; GitHub Compare, dropdown of branches/tags) or **last N commits** (1–500, default 50)
 3. Curate: ~90% pre-selected (merge / chore / deps noise dropped), bulk include/exclude, merge into groups, LLM group suggestions with Apply/Ignore
 4. Generate a brief in the UI language (optional override)
 5. Export the **same content tree** as PDF, Word (`.docx`), and Markdown
@@ -16,7 +16,7 @@ Desktop web app. Turkish and English. Single workspace per signed-in user.
 
 1. Title: `owner/repo@branch` + range
 2. Summary (2–4 sentences)
-3. Changes under headings (empty headings omitted): Improvements | Geliştirmeler, Bug fixes | Hata düzeltmeleri, Other | Diğer
+3. Changes under headings (empty headings omitted): Improvements | Geliştirmeler, Bug fixes | Hata düzeltmeleri, Other | Diğer. Grouped work is a **group title with nested outcome bullets**, never also dumped as flat Other headlines.
 4. Footnote stats only: commit count, authors, file ±, count left out of brief
 5. Optional collapsed appendix: source commits (hash + one line) — not the main body
 
@@ -54,9 +54,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-**Real repos (local dogfood):** **Connect GitHub** → paste a classic or fine-grained [personal access token](https://docs.github.com/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token). You do **not** need `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`. Then pick a repo → last N or two refs → curate → generate → export.
+**Real repos (local dogfood):** **Connect GitHub** → paste a classic or fine-grained [personal access token](https://docs.github.com/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token). You do **not** need `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`. Then pick a repo → **base...head** (or last N) → curate → generate → export.
 
-**Sample repo (no GitHub):** **Try sample repo** → last N commits → curate → generate → export.
+**Sample repo (no GitHub):** **Try sample repo** → **base...head** (`v1.4.0`…`main`) → curate → generate → export.
 
 The sample history is `acme/checkout-service` (fixture commits). Named refs such as `v1.4.0` and `main` are honored (not the whole fixture). Demo mode never calls GitHub. In production, sample sign-in stays off unless `ALLOW_DEMO_AUTH=true`.
 

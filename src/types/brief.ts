@@ -44,11 +44,16 @@ export type GroupSuggestion = {
 
 export type BriefSectionKey = "improvements" | "bugFixes" | "other";
 
+/** Group title with nested outcomes, or a standalone ungrouped bullet. */
+export type BriefBlock =
+  | { type: "item"; text: string }
+  | { type: "group"; title: string; items: string[] };
+
 export type BriefDocument = {
   title: string;
   summary: string;
   locale: Locale;
-  sections: Record<BriefSectionKey, string[]>;
+  sections: Record<BriefSectionKey, BriefBlock[]>;
   stats: {
     commitCount: number;
     authors: string[];
@@ -76,4 +81,8 @@ export type RepoSummary = {
 export type BranchSummary = {
   name: string;
   protected: boolean;
+};
+
+export type TagSummary = {
+  name: string;
 };

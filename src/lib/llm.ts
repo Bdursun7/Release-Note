@@ -9,7 +9,7 @@ import type {
   RangeStats,
 } from "@/types/brief";
 import { conventionalScope, heuristicGroupSuggestions, includedCommits } from "@/lib/curation";
-import { heuristicBrief } from "@/lib/brief-format";
+import { finalizeSections, heuristicBrief } from "@/lib/brief-format";
 
 function llmConfig(byok?: string | null, allowEnvKey = true) {
   const apiKey = byok?.trim() || (allowEnvKey ? process.env.OPENAI_API_KEY || "" : "");
@@ -118,41 +118,56 @@ export async function generateBrief(opts: {
   const fallback = heuristicBrief(opts);
   if (!hasLlm(opts.byok, opts.allowEnvKey !== false)) return fallback;
   const included = includedCommits(opts.commits, opts.curation);
-  const groups = opts.curation.groups.map((group) => ({
-    title: group.title,
-    headlines: included
-      .filter((commit) => group.shas.includes(commit.sha))
-      .map((commit) => commit.headline),
-  }));
+  const grouped = new Set(opts.curation.groups.flatMap((group) => group.shas));
+  const groups = opts.curation.groups
+    .map((group) => ({
+      title: group.title,
+      commits: included
+        .filter((commit) => group.shas.includes(commit.sha))
+        .map((commit) => commit.headline),
+    }))
+    .filter((group) => group.commits.length > 0);
+  const ungrouped = included
+    .filter((commit) => !grouped.has(commit.sha))
+    .map((commit) => ({
+      headline: commit.headline,
+      author: commit.authorName,
+    }));
   try {
     const json = (await completeJson({
       byok: opts.byok,
       allowEnvKey: opts.allowEnvKey,
-      system: `You write an internal ship brief (not a changelog dump, not a LinkedIn post). Language: ${opts.locale === "tr" ? "Turkish" : "English"}. Return JSON {summary, improvements, bugFixes, other}. summary: 2-4 sentences. Each section is an array of human-readable outcome bullets (what shipped / what is now true), not raw commit messages. Omit empty meaning — use [] and the UI will hide the heading. Keep proper nouns and APIs from the source. Do not translate code identifiers. Do not mention SHAs in the body.`,
+      system: `You write an internal ship brief (not a changelog dump, not a LinkedIn post). Language: ${opts.locale === "tr" ? "Turkish" : "English"}.
+Return JSON {summary, improvements, bugFixes, other}.
+summary: 2-4 sentences.
+Each section is an array. Entries are either:
+- a standalone outcome string (ungrouped work only), or
+- a group object {title, items} where items are 1-4 synthesized outcome bullets (what is now true).
+Rules:
+- Every provided group becomes exactly one {title, items} object under the best heading. Prefer group title + nested outcomes. Never also list those commits as sibling bullets.
+- Do not repeat a group or commit under Other (or any second heading) if it is already covered.
+- Never emit raw commit messages, conventional prefixes (feat:/fix:/chore:), or a grouped commit as a flat headline.
+- Other is only leftover ungrouped work that is not an improvement or bug fix. Use [] when empty.
+- Keep proper nouns and APIs. Do not translate code identifiers. Do not mention SHAs.`,
       user: JSON.stringify({
         title: opts.title,
         groups,
-        commits: included.map((commit) => ({
-          headline: commit.headline,
-          author: commit.authorName,
-        })),
+        ungrouped,
       }),
     })) as {
       summary?: string;
-      improvements?: string[];
-      bugFixes?: string[];
-      other?: string[];
+      improvements?: unknown;
+      bugFixes?: unknown;
+      other?: unknown;
     };
     return {
       ...fallback,
       summary: json.summary?.trim() || fallback.summary,
-      sections: {
-        improvements: Array.isArray(json.improvements)
-          ? json.improvements.filter(Boolean)
-          : fallback.sections.improvements,
-        bugFixes: Array.isArray(json.bugFixes) ? json.bugFixes.filter(Boolean) : fallback.sections.bugFixes,
-        other: Array.isArray(json.other) ? json.other.filter(Boolean) : fallback.sections.other,
-      },
+      sections: finalizeSections({
+        llm: json,
+        commits: opts.commits,
+        curation: opts.curation,
+      }),
       usedLlm: true,
     };
   } catch {

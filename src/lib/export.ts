@@ -3,18 +3,21 @@ import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { BriefDocument, BriefSectionKey } from "@/types/brief";
-import { footnote, sectionHeading } from "@/lib/brief-format";
+import type { BriefBlock, BriefDocument } from "@/types/brief";
+import { footnote, sectionBlocks, sectionHeading, SECTION_ORDER } from "@/lib/brief-format";
 
-const SECTION_ORDER: BriefSectionKey[] = ["improvements", "bugFixes", "other"];
+function markdownForBlock(block: BriefBlock): string[] {
+  if (block.type === "item") return [`- ${block.text}`];
+  return [`- **${block.title}**`, ...block.items.map((item) => `  - ${item}`)];
+}
 
 export function briefToMarkdown(brief: BriefDocument): string {
   const lines: string[] = [`# ${brief.title}`, "", brief.summary, ""];
   for (const key of SECTION_ORDER) {
-    const items = brief.sections[key];
+    const items = sectionBlocks(brief.sections, key);
     if (!items.length) continue;
     lines.push(`## ${sectionHeading(brief.locale, key)}`, "");
-    for (const item of items) lines.push(`- ${item}`);
+    for (const item of items) lines.push(...markdownForBlock(item));
     lines.push("");
   }
   lines.push("---", "", `_${footnote(brief)}_`, "", `<details>`, `<summary>${brief.locale === "tr" ? "Kaynak commit’ler" : "Source commits"}</summary>`, "");
@@ -37,7 +40,7 @@ export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
     }),
   ];
   for (const key of SECTION_ORDER) {
-    const items = brief.sections[key];
+    const items = sectionBlocks(brief.sections, key);
     if (!items.length) continue;
     children.push(
       new Paragraph({
@@ -46,12 +49,29 @@ export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
       }),
     );
     for (const item of items) {
+      if (item.type === "item") {
+        children.push(
+          new Paragraph({
+            text: item.text,
+            numbering: { reference: "brief-bullets", level: 0 },
+          }),
+        );
+        continue;
+      }
       children.push(
         new Paragraph({
-          text: item,
-          bullet: { level: 0 },
+          children: [new TextRun({ text: item.title, bold: true })],
+          numbering: { reference: "brief-bullets", level: 0 },
         }),
       );
+      for (const child of item.items) {
+        children.push(
+          new Paragraph({
+            text: child,
+            numbering: { reference: "brief-bullets", level: 1 },
+          }),
+        );
+      }
     }
   }
   children.push(
@@ -85,13 +105,29 @@ export async function briefToDocx(brief: BriefDocument): Promise<Buffer> {
     numbering: {
       config: [
         {
-          reference: "bullets",
+          reference: "brief-bullets",
           levels: [
             {
               level: 0,
               format: LevelFormat.BULLET,
               text: "•",
               alignment: "left",
+              style: {
+                paragraph: {
+                  indent: { left: 360, hanging: 180 },
+                },
+              },
+            },
+            {
+              level: 1,
+              format: LevelFormat.BULLET,
+              text: "◦",
+              alignment: "left",
+              style: {
+                paragraph: {
+                  indent: { left: 720, hanging: 180 },
+                },
+              },
             },
           ],
         },
@@ -168,6 +204,26 @@ export async function briefToPdf(brief: BriefDocument): Promise<Buffer> {
     }
   };
 
+  const writeBullet = (
+    text: string,
+    level: number,
+    font: typeof regular = regular,
+    size = 11,
+  ) => {
+    const indent = margin + level * 18;
+    const width = pageSize[0] - margin - indent - 14;
+    const lines = wrap(text, font, size, width);
+    for (let i = 0; i < lines.length; i += 1) {
+      ensure(size + 5);
+      if (i === 0) {
+        page.drawText(level === 0 ? "•" : "–", { x: indent, y, size, font: regular, color: ink });
+      }
+      page.drawText(lines[i], { x: indent + 14, y, size, font, color: ink });
+      y -= size + 5;
+    }
+    y -= 3;
+  };
+
   page.drawRectangle({
     x: 0,
     y: page.getHeight() - 8,
@@ -184,22 +240,17 @@ export async function briefToPdf(brief: BriefDocument): Promise<Buffer> {
   y -= 10;
 
   for (const key of SECTION_ORDER) {
-    const items = brief.sections[key];
+    const items = sectionBlocks(brief.sections, key);
     if (!items.length) continue;
     writeWrapped(sectionHeading(brief.locale, key), bold, 13, copper, 6);
     y -= 2;
     for (const item of items) {
-      const width = pageSize[0] - margin * 2 - 14;
-      const lines = wrap(item, regular, 11, width);
-      for (let i = 0; i < lines.length; i += 1) {
-        ensure(16);
-        if (i === 0) {
-          page.drawText("•", { x: margin, y, size: 11, font: regular, color: ink });
-        }
-        page.drawText(lines[i], { x: margin + 14, y, size: 11, font: regular, color: ink });
-        y -= 16;
+      if (item.type === "item") {
+        writeBullet(item.text, 0);
+        continue;
       }
-      y -= 4;
+      writeBullet(item.title, 0, bold, 11);
+      for (const child of item.items) writeBullet(child, 1);
     }
     y -= 8;
   }

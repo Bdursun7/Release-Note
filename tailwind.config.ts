@@ -6,14 +6,14 @@ const config: Config = {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#161410",
-          muted: "#5c564c",
-          faint: "#8a8276",
+          DEFAULT: "#2a241c",
+          muted: "#6a6156",
+          faint: "#90867a",
         },
         paper: {
-          DEFAULT: "#f4efe4",
-          raised: "#fbf8f1",
-          recede: "#e8e1d4",
+          DEFAULT: "#f6efe3",
+          raised: "#fffaf2",
+          recede: "#efe4d4",
         },
         copper: {
           DEFAULT: "#c45c26",
@@ -21,10 +21,10 @@ const config: Config = {
           soft: "#e8c4ad",
         },
         sea: {
-          DEFAULT: "#1e4d4a",
-          mist: "#d7e4e2",
+          DEFAULT: "#2a5d59",
+          mist: "#e3eeec",
         },
-        line: "#d9d1c3",
+        line: "#e4d9c8",
       },
       fontFamily: {
         serif: ["var(--font-fraunces)", "Georgia", "serif"],

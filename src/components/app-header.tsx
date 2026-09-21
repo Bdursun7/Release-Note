@@ -9,7 +9,7 @@ export function AppHeader({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const { data } = useSession();
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-line bg-ink px-6 py-3 text-paper">
+    <header className="flex items-center justify-between gap-4 border-b border-ink/80 bg-ink px-6 py-3.5 text-paper">
       <Link href={data ? "/repos" : "/"} className="flex items-baseline gap-3">
         <span className="font-serif text-lg tracking-tight">{t("brand.name")}</span>
         {!compact ? (

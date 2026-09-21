@@ -54,14 +54,14 @@ export function GenerateScreen({ draftId }: { draftId: string }) {
     <div className="min-h-screen">
       <AppHeader compact />
       <main className="mx-auto max-w-2xl px-6 py-10">
-        <h1 className="font-serif text-3xl">{t("generate.title")}</h1>
-        <p className="mt-2 text-sm text-ink-muted">{t("generate.subtitle")}</p>
+        <h1 className="font-serif text-3xl tracking-tight">{t("generate.title")}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">{t("generate.subtitle")}</p>
         {included !== null ? (
           <p className="mt-3 font-mono text-xs uppercase tracking-wider text-copper">
             {t("curate.included", { n: included })}
           </p>
         ) : null}
-        <div className="paper-card mt-8 space-y-6 p-6">
+        <div className="paper-card mt-8 space-y-6 p-7">
           <Field label={t("generate.locale")}>
             <Select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
               <option value="follow">{t("generate.followUi", { ui: locale.toUpperCase() })}</option>

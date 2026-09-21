@@ -32,6 +32,19 @@ export function recommendedSelection(commits: CommitRecord[]): Record<string, bo
   return selected;
 }
 
+/** Deselect merge/chore/deps noise without re-including commits the user already left out. */
+export function excludeNoise(commits: CommitRecord[], curation: CurationState): CurationState {
+  const selected = { ...curation.selected };
+  for (const commit of commits) {
+    if (isNoiseCommit(commit)) selected[commit.sha] = false;
+  }
+  return { ...curation, selected };
+}
+
+export function noiseShas(commits: CommitRecord[]): string[] {
+  return commits.filter(isNoiseCommit).map((commit) => commit.sha);
+}
+
 export function emptyCuration(commits: CommitRecord[]): CurationState {
   return {
     selected: recommendedSelection(commits),

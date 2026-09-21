@@ -103,6 +103,8 @@ export const demoBranches = [
   { name: "release/2026-09", protected: false },
 ];
 
+export const demoTags = [{ name: "v1.4.0" }];
+
 /** Named refs → index in `demoCommits` (newest-first). Used for fixture three-dot compares. */
 export const demoRefIndex: Record<string, number> = {
   main: 0,

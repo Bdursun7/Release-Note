@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser, jsonError } from "@/lib/api";
-import { listBranches } from "@/lib/github";
+import { listBranches, listTags } from "@/lib/github";
 
 export async function GET(request: Request) {
   const { session, githubAccessToken } = await currentUser();
@@ -10,13 +10,14 @@ export async function GET(request: Request) {
   const repo = searchParams.get("repo");
   if (!owner || !repo) return jsonError("owner and repo required");
   try {
-    const branches = await listBranches({
+    const opts = {
       token: githubAccessToken,
       isDemo: Boolean(session.isDemo),
       owner,
       repo,
-    });
-    return NextResponse.json({ branches });
+    };
+    const [branches, tags] = await Promise.all([listBranches(opts), listTags(opts)]);
+    return NextResponse.json({ branches, tags });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "GitHub request failed", 502);
   }
